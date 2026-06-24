@@ -39,8 +39,10 @@ public class jLoginPengguna extends javax.swing.JPanel {
         jLabel1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Agent.png"))); // NOI18N
 
         jLabel2.setFont(new java.awt.Font("Perpetua Titling MT", 1, 18)); // NOI18N
+        jLabel2.setForeground(new java.awt.Color(101, 146, 135));
         jLabel2.setText("HALO, SOBAT TRAVEL!");
 
+        jTextField1.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
         jTextField1.setText("Masukan Username...");
         jTextField1.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
@@ -48,6 +50,7 @@ public class jLoginPengguna extends javax.swing.JPanel {
             }
         });
 
+        jLabel3.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
         jLabel3.setText("Belum punya akun? Buat Akun!");
 
         jButton1.setBackground(new java.awt.Color(101, 146, 135));
@@ -96,7 +99,7 @@ public class jLoginPengguna extends javax.swing.JPanel {
                 .addComponent(jLabel3)
                 .addGap(18, 18, 18)
                 .addComponent(jButton1, javax.swing.GroupLayout.PREFERRED_SIZE, 50, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap(100, Short.MAX_VALUE))
+                .addContainerGap(102, Short.MAX_VALUE))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
