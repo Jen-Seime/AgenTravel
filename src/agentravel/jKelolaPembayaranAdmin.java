@@ -187,13 +187,13 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
 
         tblKelolaPembayaran.setModel(new javax.swing.table.DefaultTableModel(
             new Object [][] {
-                {null, null, null, null},
-                {null, null, null, null},
-                {null, null, null, null},
-                {null, null, null, null}
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null},
+                {null, null, null, null, null, null, null}
             },
             new String [] {
-                "Title 1", "Title 2", "Title 3", "Title 4"
+                "Kode Tiket", "Nama User", "Bus", "Rute", "Total Bayar", "Metode Pembayaran", "Status"
             }
         ));
         tblKelolaPembayaran.setPreferredSize(new java.awt.Dimension(653, 208));
