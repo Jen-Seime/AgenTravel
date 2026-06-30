@@ -4,17 +4,272 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
 /**
  *
  * @author ASUS TUF
  */
 public class jPanelKelolaBus extends javax.swing.JPanel {
 
+    private int selectedBusId = -1; // menyimpan ID bus yang sedang dipilih
+
     /**
      * Creates new form jPanelKelolaBus
      */
     public jPanelKelolaBus() {
         initComponents();
+        loadDataBus();
+        setupTableListener();
+    }
+
+    // ==================== LOAD DATA BUS KE TABEL ====================
+    private void loadDataBus() {
+        DefaultTableModel model = new DefaultTableModel(
+            new String[]{"NAMA BUS", "JUMLAH KURSI", "HARGA TIKET", "FASILITAS"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false; // tabel tidak bisa diedit langsung
+            }
+        };
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "SELECT * FROM bus ORDER BY id ASC";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(sql);
+
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getString("nama_bus"),
+                    rs.getInt("jumlah_kursi"),
+                    rs.getDouble("harga_tiket"),
+                    rs.getString("fasilitas")
+                });
+            }
+
+            jTable1.setModel(model);
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat data bus: " + e.getMessage());
+        }
+    }
+
+    // ==================== KLIK TABEL UNTUK MENGISI FORM ====================
+    private void setupTableListener() {
+        jTable1.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                int row = jTable1.getSelectedRow();
+                if (row >= 0) {
+                    String namaBus = jTable1.getValueAt(row, 0).toString();
+
+                    // Ambil data lengkap dari database berdasarkan nama bus
+                    try {
+                        Connection conn = AgenTravel.getKoneksi();
+                        String sql = "SELECT * FROM bus WHERE nama_bus = ?";
+                        PreparedStatement pst = conn.prepareStatement(sql);
+                        pst.setString(1, namaBus);
+                        ResultSet rs = pst.executeQuery();
+
+                        if (rs.next()) {
+                            selectedBusId = rs.getInt("id");
+                            jTextField1.setText(rs.getString("nama_bus"));
+                            jTextField4.setText(String.valueOf(rs.getInt("jumlah_kursi")));
+                            jTextField2.setText(String.valueOf(rs.getDouble("harga_tiket")));
+                            jTextField3.setText(rs.getString("fasilitas") != null ? rs.getString("fasilitas") : "");
+                        }
+                    } catch (Exception e) {
+                        JOptionPane.showMessageDialog(null, "Gagal mengambil data bus: " + e.getMessage());
+                    }
+                }
+            }
+        });
+    }
+
+
+    // ==================== VALIDASI FORM ====================
+    private boolean validasiForm() {
+        String namaBus = jTextField1.getText().trim();
+        String hargaTiketStr = jTextField2.getText().trim();
+        String jumlahKursiStr = jTextField4.getText().trim();
+
+        if (namaBus.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Nama bus wajib diisi!");
+            jTextField1.requestFocus();
+            return false;
+        }
+
+        if (jumlahKursiStr.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Jumlah kursi harus diisi!");
+            jTextField4.requestFocus();
+            return false;
+        }
+
+        try {
+            int jumlahKursi = Integer.parseInt(jumlahKursiStr);
+            if (jumlahKursi <= 0) {
+                JOptionPane.showMessageDialog(this, "Jumlah kursi harus lebih dari 0!");
+                jTextField4.requestFocus();
+                return false;
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Jumlah kursi harus berupa angka!");
+            jTextField4.requestFocus();
+            return false;
+        }
+
+        if (hargaTiketStr.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Harga tiket wajib diisi!");
+            jTextField2.requestFocus();
+            return false;
+        }
+
+        try {
+            double hargaTiket = Double.parseDouble(hargaTiketStr);
+            if (hargaTiket <= 0) {
+                JOptionPane.showMessageDialog(this, "Harga tiket harus lebih dari 0!");
+                jTextField2.requestFocus();
+                return false;
+            }
+        } catch (NumberFormatException e) {
+            JOptionPane.showMessageDialog(this, "Harga tiket harus berupa angka!");
+            jTextField2.requestFocus();
+            return false;
+        }
+
+        return true;
+    }
+
+    // ==================== BERSIHKAN FORM ====================
+    private void clearForm() {
+        jTextField1.setText("");
+        jTextField2.setText("");
+        jTextField3.setText("");
+        jTextField4.setText("");
+        selectedBusId = -1;
+        jTable1.clearSelection();
+        jTextField1.requestFocus();
+    }
+
+    // ==================== SIMPAN BUS BARU ====================
+    private void simpanBus() {
+        if (!validasiForm()) return;
+
+        String namaBus = jTextField1.getText().trim();
+        int jumlahKursi = Integer.parseInt(jTextField4.getText().trim());
+        double hargaTiket = Double.parseDouble(jTextField2.getText().trim());
+        String fasilitas = jTextField3.getText().trim();
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "INSERT INTO bus (nama_bus, jumlah_kursi, harga_tiket, fasilitas) VALUES (?, ?, ?, ?)";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setString(1, namaBus);
+            pst.setInt(2, jumlahKursi);
+            pst.setDouble(3, hargaTiket);
+            pst.setString(4, fasilitas.isEmpty() ? null : fasilitas);
+
+            int result = pst.executeUpdate();
+            if (result > 0) {
+                JOptionPane.showMessageDialog(this, "Data bus berhasil disimpan!");
+                clearForm();
+                loadDataBus();
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal menyimpan data bus: " + e.getMessage());
+        }
+    }
+
+    // ==================== EDIT BUS ====================
+    private void editBus() {
+        if (selectedBusId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih data bus yang ingin diedit pada tabel!");
+            return;
+        }
+
+        if (!validasiForm()) return;
+
+        String namaBus = jTextField1.getText().trim();
+        int jumlahKursi = Integer.parseInt(jTextField4.getText().trim());
+        double hargaTiket = Double.parseDouble(jTextField2.getText().trim());
+        String fasilitas = jTextField3.getText().trim();
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "UPDATE bus SET nama_bus = ?, jumlah_kursi = ?, harga_tiket = ?, fasilitas = ? WHERE id = ?";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setString(1, namaBus);
+            pst.setInt(2, jumlahKursi);
+            pst.setDouble(3, hargaTiket);
+            pst.setString(4, fasilitas.isEmpty() ? null : fasilitas);
+            pst.setInt(5, selectedBusId);
+
+            int result = pst.executeUpdate();
+            if (result > 0) {
+                JOptionPane.showMessageDialog(this, "Data bus berhasil diperbarui!");
+                clearForm();
+                loadDataBus();
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memperbarui data bus: " + e.getMessage());
+        }
+    }
+
+    // ==================== HAPUS BUS ====================
+    private void hapusBus() {
+        if (selectedBusId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih data bus yang ingin dihapus pada tabel!");
+            return;
+        }
+
+        // Cek apakah bus digunakan di jadwal
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String cekSql = "SELECT COUNT(*) AS total FROM jadwal WHERE bus_id = ?";
+            PreparedStatement pstCek = conn.prepareStatement(cekSql);
+            pstCek.setInt(1, selectedBusId);
+            ResultSet rsCek = pstCek.executeQuery();
+
+            if (rsCek.next() && rsCek.getInt("total") > 0) {
+                JOptionPane.showMessageDialog(this,
+                    "Bus tidak dapat dihapus karena masih digunakan pada jadwal.");
+                return;
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memeriksa jadwal: " + e.getMessage());
+            return;
+        }
+
+        // Konfirmasi hapus
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Apakah Anda yakin ingin menghapus bus ini?",
+            "Konfirmasi Hapus",
+            JOptionPane.YES_NO_OPTION);
+
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "DELETE FROM bus WHERE id = ?";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setInt(1, selectedBusId);
+
+            int result = pst.executeUpdate();
+            if (result > 0) {
+                JOptionPane.showMessageDialog(this, "Data bus berhasil dihapus!");
+                clearForm();
+                loadDataBus();
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal menghapus data bus: " + e.getMessage());
+        }
     }
 
     /**
@@ -40,7 +295,7 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
         jTextField1 = new javax.swing.JTextField();
         jTextField2 = new javax.swing.JTextField();
         jTextField3 = new javax.swing.JTextField();
-        jComboBox1 = new javax.swing.JComboBox<>();
+        jTextField4 = new javax.swing.JTextField();
         jButton1 = new javax.swing.JButton();
         jButton2 = new javax.swing.JButton();
         jButton3 = new javax.swing.JButton();
@@ -115,8 +370,6 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
         jLabel6.setForeground(new java.awt.Color(255, 255, 255));
         jLabel6.setText("jumlah kursi");
 
-        jComboBox1.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "1", "2", "3", "4", "5", " " }));
-
         javax.swing.GroupLayout jPanel1Layout = new javax.swing.GroupLayout(jPanel1);
         jPanel1.setLayout(jPanel1Layout);
         jPanel1Layout.setHorizontalGroup(
@@ -124,11 +377,10 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
             .addGroup(jPanel1Layout.createSequentialGroup()
                 .addGap(16, 16, 16)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                    .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
-                        .addComponent(jLabel5, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                        .addComponent(jLabel6, javax.swing.GroupLayout.DEFAULT_SIZE, 128, Short.MAX_VALUE))
+                    .addComponent(jLabel5, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                    .addComponent(jLabel6, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, 224, Short.MAX_VALUE)
                     .addComponent(jTextField1)
-                    .addComponent(jComboBox1, 0, 224, Short.MAX_VALUE))
+                    .addComponent(jTextField4))
                 .addGap(56, 56, 56)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, 224, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -156,7 +408,7 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jComboBox1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jTextField4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap(34, Short.MAX_VALUE))
         );
 
@@ -246,19 +498,22 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
     }// </editor-fold>//GEN-END:initComponents
 
     private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-        // TODO add your handling code here:
+        simpanBus();
     }//GEN-LAST:event_jButton2ActionPerformed
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        // TODO add your handling code here:
+        hapusBus();
     }//GEN-LAST:event_jButton1ActionPerformed
+
+    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
+        editBus();
+    }//GEN-LAST:event_jButton3ActionPerformed
 
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton2;
     private javax.swing.JButton jButton3;
-    private javax.swing.JComboBox<String> jComboBox1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel4;
@@ -273,5 +528,6 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
     private javax.swing.JTextField jTextField1;
     private javax.swing.JTextField jTextField2;
     private javax.swing.JTextField jTextField3;
+    private javax.swing.JTextField jTextField4;
     // End of variables declaration//GEN-END:variables
 }

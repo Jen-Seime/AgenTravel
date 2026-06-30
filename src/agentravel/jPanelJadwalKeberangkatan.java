@@ -4,17 +4,413 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
 /**
  *
  * @author ASUS
  */
 public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
 
+    private int selectedJadwalId = -1;
+    // Array untuk menyimpan bus_id yang sesuai dengan index ComboBox
+    private java.util.List<Integer> busIdList = new java.util.ArrayList<>();
+
     /**
      * Creates new form jPanelJadwalKeberangkatan
      */
     public jPanelJadwalKeberangkatan() {
         initComponents();
+        configureSpinners();
+        loadBusComboBox();
+        loadDataJadwal();
+        setupTableListener();
+    }
+
+    // ==================== CONFIGURE SPINNERS ====================
+    private void configureSpinners() {
+        jDateChooser1.setDate(new java.util.Date());
+        jTextField3.setText("12:00");
+    }
+
+    // ==================== LOAD BUS KE COMBOBOX ====================
+    private void loadBusComboBox() {
+        jComboBox1.removeAllItems();
+        busIdList.clear();
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "SELECT id, nama_bus FROM bus ORDER BY nama_bus ASC";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(sql);
+
+            while (rs.next()) {
+                busIdList.add(rs.getInt("id"));
+                jComboBox1.addItem(rs.getString("nama_bus"));
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat data bus: " + e.getMessage());
+        }
+    }
+
+    // ==================== LOAD DATA JADWAL KE TABEL ====================
+    private void loadDataJadwal() {
+        DefaultTableModel model = new DefaultTableModel(
+                new String[] { "BUS", "ASAL", "TUJUAN", "TANGGAL", "JAM", "SISA KURSI" }, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "SELECT j.id, b.nama_bus, j.asal, j.tujuan, j.tanggal_berangkat, j.jam_berangkat, "
+                    + "(SELECT COUNT(*) FROM kursi k WHERE k.jadwal_id = j.id AND k.status = 'Tersedia') AS sisa_kursi "
+                    + "FROM jadwal j JOIN bus b ON j.bus_id = b.id ORDER BY j.tanggal_berangkat ASC";
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(sql);
+
+            while (rs.next()) {
+                model.addRow(new Object[] {
+                        rs.getString("nama_bus"),
+                        rs.getString("asal"),
+                        rs.getString("tujuan"),
+                        rs.getString("tanggal_berangkat"),
+                        rs.getString("jam_berangkat"),
+                        rs.getInt("sisa_kursi")
+                });
+            }
+
+            jTable1.setModel(model);
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat data jadwal: " + e.getMessage());
+        }
+    }
+
+    // ==================== KLIK TABEL UNTUK MENGISI FORM ====================
+    private void setupTableListener() {
+        jTable1.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                int row = jTable1.getSelectedRow();
+                if (row >= 0) {
+                    String namaBus = jTable1.getValueAt(row, 0).toString();
+                    String asal = jTable1.getValueAt(row, 1).toString();
+                    String tujuan = jTable1.getValueAt(row, 2).toString();
+
+                    try {
+                        Connection conn = AgenTravel.getKoneksi();
+                        String sql = "SELECT j.id, j.bus_id, j.asal, j.tujuan, j.tanggal_berangkat, j.jam_berangkat "
+                                + "FROM jadwal j JOIN bus b ON j.bus_id = b.id "
+                                + "WHERE b.nama_bus = ? AND j.asal = ? AND j.tujuan = ? "
+                                + "LIMIT 1";
+                        PreparedStatement pst = conn.prepareStatement(sql);
+                        pst.setString(1, namaBus);
+                        pst.setString(2, asal);
+                        pst.setString(3, tujuan);
+                        ResultSet rs = pst.executeQuery();
+
+                        if (rs.next()) {
+                            selectedJadwalId = rs.getInt("id");
+                            int busId = rs.getInt("bus_id");
+
+                            // Set ComboBox ke bus yang sesuai
+                            for (int i = 0; i < busIdList.size(); i++) {
+                                if (busIdList.get(i) == busId) {
+                                    jComboBox1.setSelectedIndex(i);
+                                    break;
+                                }
+                            }
+
+                            jTextField1.setText(rs.getString("asal"));
+                            jTextField2.setText(rs.getString("tujuan"));
+
+                            String tglBerangkat = rs.getString("tanggal_berangkat");
+                            String jamBerangkat = rs.getString("jam_berangkat");
+                            try {
+                                java.text.SimpleDateFormat sdfDate = new java.text.SimpleDateFormat("yyyy-MM-dd");
+                                jDateChooser1.setDate(sdfDate.parse(tglBerangkat));
+                            } catch (Exception e) {
+                                jDateChooser1.setDate(new java.util.Date());
+                            }
+                            try {
+                                if (jamBerangkat != null) {
+                                    if (jamBerangkat.length() > 5) {
+                                        jTextField3.setText(jamBerangkat.substring(0, 5));
+                                    } else {
+                                        jTextField3.setText(jamBerangkat);
+                                    }
+                                } else {
+                                    jTextField3.setText("12:00");
+                                }
+                            } catch (Exception e) {
+                                jTextField3.setText("12:00");
+                            }
+                        }
+                    } catch (Exception e) {
+                        JOptionPane.showMessageDialog(null, "Gagal mengambil data jadwal: " + e.getMessage());
+                    }
+                }
+            }
+        });
+    }
+
+    // ==================== VALIDASI FORM ====================
+    private boolean validasiForm() {
+        if (jComboBox1.getItemCount() == 0) {
+            JOptionPane.showMessageDialog(this, "Belum ada data bus! Tambahkan bus terlebih dahulu.");
+            return false;
+        }
+
+        if (jTextField1.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Kota asal wajib diisi!");
+            jTextField1.requestFocus();
+            return false;
+        }
+
+        if (jTextField2.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Kota tujuan wajib diisi!");
+            jTextField2.requestFocus();
+            return false;
+        }
+
+        if (jDateChooser1.getDate() == null) {
+            JOptionPane.showMessageDialog(this, "Tanggal berangkat wajib diisi!");
+            return false;
+        }
+
+        String jamInput = jTextField3.getText().trim();
+        if (jamInput.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Jam berangkat wajib diisi!");
+            jTextField3.requestFocus();
+            return false;
+        }
+
+        if (!jamInput.matches("^\\d{2}:\\d{2}(:\\d{2})?$")) {
+            JOptionPane.showMessageDialog(this, "Format jam salah! Gunakan format HH:mm (contoh: 14:30)");
+            jTextField3.requestFocus();
+            return false;
+        }
+
+        return true;
+    }
+
+    // ==================== BERSIHKAN FORM ====================
+    private void clearForm() {
+        if (jComboBox1.getItemCount() > 0) {
+            jComboBox1.setSelectedIndex(0);
+        }
+        jTextField1.setText("");
+        jTextField2.setText("");
+        jDateChooser1.setDate(new java.util.Date());
+        jTextField3.setText("12:00");
+        selectedJadwalId = -1;
+        jTable1.clearSelection();
+    }
+
+    // ==================== SIMPAN JADWAL + AUTO CREATE KURSI ====================
+    private void simpanJadwal() {
+        if (!validasiForm())
+            return;
+
+        int busId = busIdList.get(jComboBox1.getSelectedIndex());
+        String asal = jTextField1.getText().trim();
+        String tujuan = jTextField2.getText().trim();
+
+        java.util.Date tanggalDate = jDateChooser1.getDate();
+        java.text.SimpleDateFormat sdfDate = new java.text.SimpleDateFormat("yyyy-MM-dd");
+        String tanggal = sdfDate.format(tanggalDate);
+
+        String jam = jTextField3.getText().trim();
+
+        Connection conn = null;
+        try {
+            conn = AgenTravel.getKoneksi();
+            conn.setAutoCommit(false); // mulai transaction
+
+            // 1. Simpan jadwal dan ambil ID yang di-generate
+            String sqlJadwal = "INSERT INTO jadwal (bus_id, asal, tujuan, tanggal_berangkat, jam_berangkat) VALUES (?, ?, ?, ?, ?)";
+            PreparedStatement pstJadwal = conn.prepareStatement(sqlJadwal, Statement.RETURN_GENERATED_KEYS);
+            pstJadwal.setInt(1, busId);
+            pstJadwal.setString(2, asal);
+            pstJadwal.setString(3, tujuan);
+            pstJadwal.setString(4, tanggal);
+            pstJadwal.setString(5, jam);
+            pstJadwal.executeUpdate();
+
+            // Ambil ID jadwal yang baru dibuat
+            ResultSet generatedKeys = pstJadwal.getGeneratedKeys();
+            int jadwalId = -1;
+            if (generatedKeys.next()) {
+                jadwalId = generatedKeys.getInt(1);
+            }
+
+            // 2. Ambil jumlah_kursi dari bus yang dipilih
+            String sqlBus = "SELECT jumlah_kursi FROM bus WHERE id = ?";
+            PreparedStatement pstBus = conn.prepareStatement(sqlBus);
+            pstBus.setInt(1, busId);
+            ResultSet rsBus = pstBus.executeQuery();
+
+            int jumlahKursi = 0;
+            if (rsBus.next()) {
+                jumlahKursi = rsBus.getInt("jumlah_kursi");
+            }
+
+            // 3. Auto-create kursi: A1, A2, A3, ... A(jumlah_kursi)
+            String sqlKursi = "INSERT INTO kursi (jadwal_id, nomor_kursi, status) VALUES (?, ?, 'Tersedia')";
+            PreparedStatement pstKursi = conn.prepareStatement(sqlKursi);
+
+            for (int i = 1; i <= jumlahKursi; i++) {
+                String nomorKursi = "A" + i;
+                pstKursi.setInt(1, jadwalId);
+                pstKursi.setString(2, nomorKursi);
+                pstKursi.addBatch();
+            }
+            pstKursi.executeBatch();
+
+            conn.commit(); // commit transaction
+
+            JOptionPane.showMessageDialog(this,
+                    "Jadwal berhasil disimpan!\n" + jumlahKursi + " kursi otomatis dibuat (A1 - A" + jumlahKursi + ")");
+            clearForm();
+            loadDataJadwal();
+
+        } catch (Exception e) {
+            // Rollback jika ada error
+            try {
+                if (conn != null)
+                    conn.rollback();
+            } catch (Exception ex) {
+            }
+            JOptionPane.showMessageDialog(this, "Gagal menyimpan jadwal: " + e.getMessage());
+        } finally {
+            try {
+                if (conn != null)
+                    conn.setAutoCommit(true);
+            } catch (Exception ex) {
+            }
+        }
+    }
+
+    // ==================== EDIT JADWAL ====================
+    private void editJadwal() {
+        if (selectedJadwalId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih jadwal yang ingin diedit pada tabel!");
+            return;
+        }
+
+        if (!validasiForm())
+            return;
+
+        int busId = busIdList.get(jComboBox1.getSelectedIndex());
+        String asal = jTextField1.getText().trim();
+        String tujuan = jTextField2.getText().trim();
+
+        java.util.Date tanggalDate = jDateChooser1.getDate();
+        java.text.SimpleDateFormat sdfDate = new java.text.SimpleDateFormat("yyyy-MM-dd");
+        String tanggal = sdfDate.format(tanggalDate);
+
+        String jam = jTextField3.getText().trim();
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String sql = "UPDATE jadwal SET bus_id = ?, asal = ?, tujuan = ?, tanggal_berangkat = ?, jam_berangkat = ? WHERE id = ?";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setInt(1, busId);
+            pst.setString(2, asal);
+            pst.setString(3, tujuan);
+            pst.setString(4, tanggal);
+            pst.setString(5, jam);
+            pst.setInt(6, selectedJadwalId);
+
+            int result = pst.executeUpdate();
+            if (result > 0) {
+                JOptionPane.showMessageDialog(this, "Jadwal berhasil diperbarui!");
+                clearForm();
+                loadDataJadwal();
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memperbarui jadwal: " + e.getMessage());
+        }
+    }
+
+    // ==================== HAPUS JADWAL + KURSI ====================
+    private void hapusJadwal() {
+        if (selectedJadwalId == -1) {
+            JOptionPane.showMessageDialog(this, "Pilih jadwal yang ingin dihapus pada tabel!");
+            return;
+        }
+
+        // Cek apakah ada pemesanan pada jadwal ini
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            String cekSql = "SELECT COUNT(*) AS total FROM pemesanan WHERE jadwal_id = ?";
+            PreparedStatement pstCek = conn.prepareStatement(cekSql);
+            pstCek.setInt(1, selectedJadwalId);
+            ResultSet rsCek = pstCek.executeQuery();
+
+            if (rsCek.next() && rsCek.getInt("total") > 0) {
+                JOptionPane.showMessageDialog(this,
+                        "Jadwal tidak dapat dihapus karena sudah ada pemesanan tiket.");
+                return;
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Gagal memeriksa pemesanan: " + e.getMessage());
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Apakah Anda yakin ingin menghapus jadwal ini?\nSemua data kursi pada jadwal ini juga akan dihapus.",
+                "Konfirmasi Hapus",
+                JOptionPane.YES_NO_OPTION);
+
+        if (confirm != JOptionPane.YES_OPTION)
+            return;
+
+        Connection conn = null;
+        try {
+            conn = AgenTravel.getKoneksi();
+            conn.setAutoCommit(false);
+
+            // Hapus kursi dulu (child)
+            String sqlKursi = "DELETE FROM kursi WHERE jadwal_id = ?";
+            PreparedStatement pstKursi = conn.prepareStatement(sqlKursi);
+            pstKursi.setInt(1, selectedJadwalId);
+            pstKursi.executeUpdate();
+
+            // Hapus jadwal (parent)
+            String sqlJadwal = "DELETE FROM jadwal WHERE id = ?";
+            PreparedStatement pstJadwal = conn.prepareStatement(sqlJadwal);
+            pstJadwal.setInt(1, selectedJadwalId);
+            pstJadwal.executeUpdate();
+
+            conn.commit();
+
+            JOptionPane.showMessageDialog(this, "Jadwal dan data kursi berhasil dihapus!");
+            clearForm();
+            loadDataJadwal();
+
+        } catch (Exception e) {
+            try {
+                if (conn != null)
+                    conn.rollback();
+            } catch (Exception ex) {
+            }
+            JOptionPane.showMessageDialog(this, "Gagal menghapus jadwal: " + e.getMessage());
+        } finally {
+            try {
+                if (conn != null)
+                    conn.setAutoCommit(true);
+            } catch (Exception ex) {
+            }
+        }
     }
 
     /**
@@ -23,6 +419,7 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
      * regenerated by the Form Editor.
      */
     @SuppressWarnings("unchecked")
+    // <editor-fold defaultstate="collapsed" desc="Generated
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
@@ -36,10 +433,10 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
         jTextField1 = new javax.swing.JTextField();
         jTextField2 = new javax.swing.JTextField();
         jLabel3 = new javax.swing.JLabel();
-        jTextField3 = new javax.swing.JTextField();
         jLabel4 = new javax.swing.JLabel();
         jLabel5 = new javax.swing.JLabel();
-        jTextField4 = new javax.swing.JTextField();
+        jDateChooser1 = new com.toedter.calendar.JDateChooser();
+        jTextField3 = new javax.swing.JTextField();
         jButton1 = new javax.swing.JButton();
         jButton2 = new javax.swing.JButton();
         jButton3 = new javax.swing.JButton();
@@ -83,8 +480,6 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
         jLabel3.setForeground(new java.awt.Color(255, 255, 255));
         jLabel3.setText("tujuan");
 
-        jTextField3.addActionListener(this::jTextField3ActionPerformed);
-
         jLabel4.setFont(new java.awt.Font("Perpetua Titling MT", 1, 12)); // NOI18N
         jLabel4.setForeground(new java.awt.Color(255, 255, 255));
         jLabel4.setText("Jam");
@@ -92,8 +487,6 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
         jLabel5.setFont(new java.awt.Font("Perpetua Titling MT", 1, 12)); // NOI18N
         jLabel5.setForeground(new java.awt.Color(255, 255, 255));
         jLabel5.setText("TANGGAL");
-
-        jTextField4.addActionListener(this::jTextField4ActionPerformed);
 
         javax.swing.GroupLayout jPanel4Layout = new javax.swing.GroupLayout(jPanel4);
         jPanel4.setLayout(jPanel4Layout);
@@ -106,19 +499,25 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
                     .addComponent(jLabel2)
                     .addComponent(jTextField1)
                     .addComponent(jComboBox1, 0, 196, Short.MAX_VALUE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 89, Short.MAX_VALUE)
                 .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(jLabel3)
-                    .addComponent(jTextField2, javax.swing.GroupLayout.PREFERRED_SIZE, 225, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel4Layout.createSequentialGroup()
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jLabel3)
+                            .addComponent(jTextField2, javax.swing.GroupLayout.PREFERRED_SIZE, 225, javax.swing.GroupLayout.PREFERRED_SIZE)))
                     .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addComponent(jLabel4)
-                        .addGap(113, 113, 113)
-                        .addComponent(jLabel5))
-                    .addGroup(jPanel4Layout.createSequentialGroup()
-                        .addComponent(jTextField4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(76, 76, 76)
-                        .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, 133, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                .addGap(75, 75, 75))
+                        .addGap(135, 135, 135)
+                        .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
+                            .addGroup(jPanel4Layout.createSequentialGroup()
+                                .addComponent(jLabel4)
+                                .addGap(173, 173, 173)
+                                .addComponent(jLabel5))
+                            .addGroup(jPanel4Layout.createSequentialGroup()
+                                .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addComponent(jDateChooser1, javax.swing.GroupLayout.PREFERRED_SIZE, 127, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addGap(0, 19, Short.MAX_VALUE)))
+                .addGap(34, 34, 34))
         );
         jPanel4Layout.setVerticalGroup(
             jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -145,9 +544,9 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
                             .addComponent(jLabel5))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jTextField4, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, 32, javax.swing.GroupLayout.PREFERRED_SIZE))))
-                .addContainerGap(42, Short.MAX_VALUE))
+                            .addComponent(jDateChooser1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(jTextField3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))))
+                .addContainerGap(147, Short.MAX_VALUE))
         );
 
         jButton1.setFont(new java.awt.Font("Perpetua Titling MT", 1, 12)); // NOI18N
@@ -185,7 +584,7 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
                     .addComponent(jScrollPane1)
                     .addGroup(jPanel3Layout.createSequentialGroup()
                         .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 59, Short.MAX_VALUE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 61, Short.MAX_VALUE)
                         .addGroup(jPanel3Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(jButton1, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 160, javax.swing.GroupLayout.PREFERRED_SIZE)
                             .addComponent(jButton2, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 160, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -244,44 +643,36 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
         );
     }// </editor-fold>//GEN-END:initComponents
 
-    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton1ActionPerformed
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jButton1ActionPerformed
+        simpanJadwal();
+    }// GEN-LAST:event_jButton1ActionPerformed
 
-    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton2ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton2ActionPerformed
+    private void jButton2ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jButton2ActionPerformed
+        editJadwal();
+    }// GEN-LAST:event_jButton2ActionPerformed
 
-    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton3ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jButton3ActionPerformed
+    private void jButton3ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jButton3ActionPerformed
+        hapusJadwal();
+    }// GEN-LAST:event_jButton3ActionPerformed
 
-    private void jComboBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jComboBox1ActionPerformed
+    private void jComboBox1ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jComboBox1ActionPerformed
         // TODO add your handling code here:
-    }//GEN-LAST:event_jComboBox1ActionPerformed
+    }// GEN-LAST:event_jComboBox1ActionPerformed
 
-    private void jTextField1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField1ActionPerformed
+    private void jTextField1ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jTextField1ActionPerformed
         // TODO add your handling code here:
-    }//GEN-LAST:event_jTextField1ActionPerformed
+    }// GEN-LAST:event_jTextField1ActionPerformed
 
-    private void jTextField2ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField2ActionPerformed
+    private void jTextField2ActionPerformed(java.awt.event.ActionEvent evt) {// GEN-FIRST:event_jTextField2ActionPerformed
         // TODO add your handling code here:
-    }//GEN-LAST:event_jTextField2ActionPerformed
-
-    private void jTextField3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField3ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jTextField3ActionPerformed
-
-    private void jTextField4ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField4ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jTextField4ActionPerformed
-
+    }// GEN-LAST:event_jTextField2ActionPerformed
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton jButton1;
     private javax.swing.JButton jButton2;
     private javax.swing.JButton jButton3;
     private javax.swing.JComboBox<String> jComboBox1;
+    private com.toedter.calendar.JDateChooser jDateChooser1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
@@ -296,6 +687,5 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
     private javax.swing.JTextField jTextField1;
     private javax.swing.JTextField jTextField2;
     private javax.swing.JTextField jTextField3;
-    private javax.swing.JTextField jTextField4;
     // End of variables declaration//GEN-END:variables
 }
