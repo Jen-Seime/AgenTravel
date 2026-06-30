@@ -4,11 +4,38 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import javax.swing.JOptionPane;
+
 /**
  *
  * @author ASUS
  */
 public class AgenTravel {
+    
+    private static Connection koneksi;
+
+    public static Connection getKoneksi() {
+        
+        
+        try {
+            if (koneksi == null || koneksi.isClosed()) {
+
+                String url = "jdbc:mysql://localhost:3306/travel_bus_db";
+                String user = "root";
+                String password = "";
+
+                Class.forName("com.mysql.cj.jdbc.Driver");
+                koneksi = DriverManager.getConnection(url, user, password);
+            }
+        } catch (ClassNotFoundException | SQLException e) {
+            JOptionPane.showMessageDialog(null, "Koneksi Database Gagal: " + e.getMessage());
+        }
+
+        return koneksi;
+    }
 
     /**
      * @param args the command line arguments
