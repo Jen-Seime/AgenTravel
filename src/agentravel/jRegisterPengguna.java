@@ -8,12 +8,12 @@ package agentravel;
  *
  * @author ACER NITRO V15
  */
-public class jLoginPengguna extends javax.swing.JPanel {
+public class jRegisterPengguna extends javax.swing.JPanel {
 
     /**
      * Creates new form jLoginPengguna
      */
-    public jLoginPengguna() {
+    public jRegisterPengguna() {
         initComponents();
     }
 
