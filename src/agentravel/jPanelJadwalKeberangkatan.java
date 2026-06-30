@@ -61,7 +61,7 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
     // ==================== LOAD DATA JADWAL KE TABEL ====================
     private void loadDataJadwal() {
         DefaultTableModel model = new DefaultTableModel(
-                new String[] { "BUS", "ASAL", "TUJUAN", "TANGGAL", "JAM", "SISA KURSI" }, 0) {
+                new String[] { "ID", "BUS ID", "BUS", "ASAL", "TUJUAN", "TANGGAL", "JAM", "SISA KURSI" }, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -70,7 +70,7 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
 
         try {
             Connection conn = AgenTravel.getKoneksi();
-            String sql = "SELECT j.id, b.nama_bus, j.asal, j.tujuan, j.tanggal_berangkat, j.jam_berangkat, "
+            String sql = "SELECT j.id, j.bus_id, b.nama_bus, j.asal, j.tujuan, j.tanggal_berangkat, j.jam_berangkat, "
                     + "(SELECT COUNT(*) FROM kursi k WHERE k.jadwal_id = j.id AND k.status = 'Tersedia') AS sisa_kursi "
                     + "FROM jadwal j JOIN bus b ON j.bus_id = b.id ORDER BY j.tanggal_berangkat ASC";
             Statement st = conn.createStatement();
@@ -78,6 +78,8 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
 
             while (rs.next()) {
                 model.addRow(new Object[] {
+                        rs.getInt("id"),
+                        rs.getInt("bus_id"),
                         rs.getString("nama_bus"),
                         rs.getString("asal"),
                         rs.getString("tujuan"),
@@ -88,6 +90,7 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
             }
 
             jTable1.setModel(model);
+            sembunyikanKolomId();
 
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Gagal memuat data jadwal: " + e.getMessage());
@@ -101,65 +104,59 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 int row = jTable1.getSelectedRow();
                 if (row >= 0) {
-                    String namaBus = jTable1.getValueAt(row, 0).toString();
-                    String asal = jTable1.getValueAt(row, 1).toString();
-                    String tujuan = jTable1.getValueAt(row, 2).toString();
-
-                    try {
-                        Connection conn = AgenTravel.getKoneksi();
-                        String sql = "SELECT j.id, j.bus_id, j.asal, j.tujuan, j.tanggal_berangkat, j.jam_berangkat "
-                                + "FROM jadwal j JOIN bus b ON j.bus_id = b.id "
-                                + "WHERE b.nama_bus = ? AND j.asal = ? AND j.tujuan = ? "
-                                + "LIMIT 1";
-                        PreparedStatement pst = conn.prepareStatement(sql);
-                        pst.setString(1, namaBus);
-                        pst.setString(2, asal);
-                        pst.setString(3, tujuan);
-                        ResultSet rs = pst.executeQuery();
-
-                        if (rs.next()) {
-                            selectedJadwalId = rs.getInt("id");
-                            int busId = rs.getInt("bus_id");
-
-                            // Set ComboBox ke bus yang sesuai
-                            for (int i = 0; i < busIdList.size(); i++) {
-                                if (busIdList.get(i) == busId) {
-                                    jComboBox1.setSelectedIndex(i);
-                                    break;
-                                }
-                            }
-
-                            jTextField1.setText(rs.getString("asal"));
-                            jTextField2.setText(rs.getString("tujuan"));
-
-                            String tglBerangkat = rs.getString("tanggal_berangkat");
-                            String jamBerangkat = rs.getString("jam_berangkat");
-                            try {
-                                java.text.SimpleDateFormat sdfDate = new java.text.SimpleDateFormat("yyyy-MM-dd");
-                                jDateChooser1.setDate(sdfDate.parse(tglBerangkat));
-                            } catch (Exception e) {
-                                jDateChooser1.setDate(new java.util.Date());
-                            }
-                            try {
-                                if (jamBerangkat != null) {
-                                    if (jamBerangkat.length() > 5) {
-                                        jTextField3.setText(jamBerangkat.substring(0, 5));
-                                    } else {
-                                        jTextField3.setText(jamBerangkat);
-                                    }
-                                } else {
-                                    jTextField3.setText("12:00");
-                                }
-                            } catch (Exception e) {
-                                jTextField3.setText("12:00");
-                            }
-                        }
-                    } catch (Exception e) {
-                        JOptionPane.showMessageDialog(null, "Gagal mengambil data jadwal: " + e.getMessage());
-                    }
+                    isiFormDariTabel(row);
                 }
             }
         });
+    }
+
+    private void isiFormDariTabel(int row) {
+        int modelRow = jTable1.convertRowIndexToModel(row);
+        DefaultTableModel model = (DefaultTableModel) jTable1.getModel();
+
+        selectedJadwalId = Integer.parseInt(model.getValueAt(modelRow, 0).toString());
+        int busId = Integer.parseInt(model.getValueAt(modelRow, 1).toString());
+
+        for (int i = 0; i < busIdList.size(); i++) {
+            if (busIdList.get(i) == busId) {
+                jComboBox1.setSelectedIndex(i);
+                break;
+            }
+        }
+
+        jTextField1.setText(getTableValue(modelRow, 3));
+        jTextField2.setText(getTableValue(modelRow, 4));
+
+        try {
+            java.text.SimpleDateFormat sdfDate = new java.text.SimpleDateFormat("yyyy-MM-dd");
+            jDateChooser1.setDate(sdfDate.parse(getTableValue(modelRow, 5)));
+        } catch (Exception e) {
+            jDateChooser1.setDate(new java.util.Date());
+        }
+
+        String jamBerangkat = getTableValue(modelRow, 6);
+        if (jamBerangkat.length() > 5) {
+            jTextField3.setText(jamBerangkat.substring(0, 5));
+        } else if (!jamBerangkat.isEmpty()) {
+            jTextField3.setText(jamBerangkat);
+        } else {
+            jTextField3.setText("12:00");
+        }
+    }
+
+    private String getTableValue(int row, int column) {
+        Object value = jTable1.getModel().getValueAt(row, column);
+        return value == null ? "" : value.toString();
+    }
+
+    private void sembunyikanKolomId() {
+        if (jTable1.getColumnCount() > 1) {
+            for (int i = 0; i <= 1; i++) {
+                jTable1.getColumnModel().getColumn(i).setMinWidth(0);
+                jTable1.getColumnModel().getColumn(i).setMaxWidth(0);
+                jTable1.getColumnModel().getColumn(i).setWidth(0);
+            }
+        }
     }
 
     // ==================== VALIDASI FORM ====================
@@ -335,6 +332,10 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
                 JOptionPane.showMessageDialog(this, "Jadwal berhasil diperbarui!");
                 clearForm();
                 loadDataJadwal();
+            } else {
+                JOptionPane.showMessageDialog(this, "Jadwal tidak ditemukan atau sudah dihapus.");
+                clearForm();
+                loadDataJadwal();
             }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Gagal memperbarui jadwal: " + e.getMessage());
@@ -389,7 +390,15 @@ public class jPanelJadwalKeberangkatan extends javax.swing.JPanel {
             String sqlJadwal = "DELETE FROM jadwal WHERE id = ?";
             PreparedStatement pstJadwal = conn.prepareStatement(sqlJadwal);
             pstJadwal.setInt(1, selectedJadwalId);
-            pstJadwal.executeUpdate();
+            int deletedJadwal = pstJadwal.executeUpdate();
+
+            if (deletedJadwal == 0) {
+                conn.rollback();
+                JOptionPane.showMessageDialog(this, "Jadwal tidak ditemukan atau sudah dihapus.");
+                clearForm();
+                loadDataJadwal();
+                return;
+            }
 
             conn.commit();
 

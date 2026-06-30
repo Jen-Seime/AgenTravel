@@ -26,12 +26,13 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
         initComponents();
         loadDataBus();
         setupTableListener();
+        jButton3.addActionListener(evt -> editBus());
     }
 
     // ==================== LOAD DATA BUS KE TABEL ====================
     private void loadDataBus() {
         DefaultTableModel model = new DefaultTableModel(
-            new String[]{"NAMA BUS", "JUMLAH KURSI", "HARGA TIKET", "FASILITAS"}, 0
+            new String[]{"ID", "NAMA BUS", "JUMLAH KURSI", "HARGA TIKET", "FASILITAS"}, 0
         ) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -47,6 +48,7 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
 
             while (rs.next()) {
                 model.addRow(new Object[]{
+                    rs.getInt("id"),
                     rs.getString("nama_bus"),
                     rs.getInt("jumlah_kursi"),
                     rs.getDouble("harga_tiket"),
@@ -55,6 +57,7 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
             }
 
             jTable1.setModel(model);
+            sembunyikanKolomId();
 
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Gagal memuat data bus: " + e.getMessage());
@@ -68,29 +71,34 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
             public void mouseClicked(java.awt.event.MouseEvent evt) {
                 int row = jTable1.getSelectedRow();
                 if (row >= 0) {
-                    String namaBus = jTable1.getValueAt(row, 0).toString();
-
-                    // Ambil data lengkap dari database berdasarkan nama bus
-                    try {
-                        Connection conn = AgenTravel.getKoneksi();
-                        String sql = "SELECT * FROM bus WHERE nama_bus = ?";
-                        PreparedStatement pst = conn.prepareStatement(sql);
-                        pst.setString(1, namaBus);
-                        ResultSet rs = pst.executeQuery();
-
-                        if (rs.next()) {
-                            selectedBusId = rs.getInt("id");
-                            jTextField1.setText(rs.getString("nama_bus"));
-                            jTextField4.setText(String.valueOf(rs.getInt("jumlah_kursi")));
-                            jTextField2.setText(String.valueOf(rs.getDouble("harga_tiket")));
-                            jTextField3.setText(rs.getString("fasilitas") != null ? rs.getString("fasilitas") : "");
-                        }
-                    } catch (Exception e) {
-                        JOptionPane.showMessageDialog(null, "Gagal mengambil data bus: " + e.getMessage());
-                    }
+                    isiFormDariTabel(row);
                 }
             }
         });
+    }
+
+    private void isiFormDariTabel(int row) {
+        int modelRow = jTable1.convertRowIndexToModel(row);
+        DefaultTableModel model = (DefaultTableModel) jTable1.getModel();
+
+        selectedBusId = Integer.parseInt(model.getValueAt(modelRow, 0).toString());
+        jTextField1.setText(getTableValue(modelRow, 1));
+        jTextField4.setText(getTableValue(modelRow, 2));
+        jTextField2.setText(getTableValue(modelRow, 3));
+        jTextField3.setText(getTableValue(modelRow, 4));
+    }
+
+    private String getTableValue(int row, int column) {
+        Object value = jTable1.getModel().getValueAt(row, column);
+        return value == null ? "" : value.toString();
+    }
+
+    private void sembunyikanKolomId() {
+        if (jTable1.getColumnCount() > 0) {
+            jTable1.getColumnModel().getColumn(0).setMinWidth(0);
+            jTable1.getColumnModel().getColumn(0).setMaxWidth(0);
+            jTable1.getColumnModel().getColumn(0).setWidth(0);
+        }
     }
 
 
@@ -222,6 +230,10 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
                 JOptionPane.showMessageDialog(this, "Data bus berhasil diperbarui!");
                 clearForm();
                 loadDataBus();
+            } else {
+                JOptionPane.showMessageDialog(this, "Data bus tidak ditemukan atau sudah dihapus.");
+                clearForm();
+                loadDataBus();
             }
         } catch (Exception e) {
             JOptionPane.showMessageDialog(this, "Gagal memperbarui data bus: " + e.getMessage());
@@ -270,6 +282,10 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
             int result = pst.executeUpdate();
             if (result > 0) {
                 JOptionPane.showMessageDialog(this, "Data bus berhasil dihapus!");
+                clearForm();
+                loadDataBus();
+            } else {
+                JOptionPane.showMessageDialog(this, "Data bus tidak ditemukan atau sudah dihapus.");
                 clearForm();
                 loadDataBus();
             }
