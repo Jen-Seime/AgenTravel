@@ -119,6 +119,12 @@ public class jPanelKelolaBus extends javax.swing.JPanel {
                 jTextField4.requestFocus();
                 return false;
             }
+            if (jumlahKursi > 26) {
+                JOptionPane.showMessageDialog(this,
+                    "Jumlah kursi maksimal 26!\n(Kapasitas tampilan kursi saat ini: 26 kursi)");
+                jTextField4.requestFocus();
+                return false;
+            }
         } catch (NumberFormatException e) {
             JOptionPane.showMessageDialog(this, "Jumlah kursi harus berupa angka!");
             jTextField4.requestFocus();

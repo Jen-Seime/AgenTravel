@@ -4,17 +4,226 @@
  */
 package agentravel;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.text.NumberFormat;
+import java.util.Locale;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
 /**
  *
  * @author LENOVO
  */
 public class jRiwayatPemesananPengguna extends javax.swing.JPanel {
 
+    private int userId = -1;
+    private String namaUser = "";
+
     /**
      * Creates new form jRiwayatPemesananPengguna
      */
     public jRiwayatPemesananPengguna() {
+        this(-1, "");
+    }
+
+    public jRiwayatPemesananPengguna(int userId, String namaUser) {
+        this.userId = userId;
+        this.namaUser = namaUser;
         initComponents();
+        setupForm();
+        loadDataRiwayat();
+        setupTableListener();
+        btnDownloadTiket.addActionListener(evt -> downloadTiket());
+    }
+
+    public void setUserId(int userId, String namaUser) {
+        this.userId = userId;
+        this.namaUser = namaUser;
+        setupForm();
+        loadDataRiwayat();
+        clearForm();
+    }
+
+    private void setupForm() {
+        txtKodeTiket.setEditable(false);
+        txtNama.setEditable(false);
+        txtBus.setEditable(false);
+        txtRute.setEditable(false);
+        txtTanggal.setEditable(false);
+        txtJam.setEditable(false);
+        txtKursi.setEditable(false);
+        txtJumlahTiket.setEditable(false);
+        txtTotalBayar5.setEditable(false);
+        txtStatus.setEditable(false);
+
+        btnProfil.setText(namaUser == null || namaUser.trim().isEmpty() ? "PELANGGAN" : namaUser);
+        btnDownloadTiket.setEnabled(false);
+    }
+
+    private void loadDataRiwayat() {
+        DefaultTableModel model = new DefaultTableModel(
+            new String[]{"Kode", "Nama", "Bus", "Rute", "Tanggal", "Jam", "Kursi", "Jumlah Tiket", "Total Bayar", "Status"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        if (userId <= 0) {
+            tblRiwayatPemesanan.setModel(model);
+            return;
+        }
+
+        String sql = "SELECT p.kode_tiket, u.nama AS nama_user, b.nama_bus, j.asal, j.tujuan, "
+                   + "j.tanggal_berangkat, j.jam_berangkat, "
+                   + "GROUP_CONCAT(k.nomor_kursi ORDER BY k.nomor_kursi SEPARATOR ', ') AS kursi, "
+                   + "p.jumlah_tiket, p.total_bayar, p.status "
+                   + "FROM pemesanan p "
+                   + "JOIN users u ON p.user_id = u.id "
+                   + "JOIN jadwal j ON p.jadwal_id = j.id "
+                   + "JOIN bus b ON j.bus_id = b.id "
+                   + "LEFT JOIN detail_pemesanan dp ON p.id = dp.pemesanan_id "
+                   + "LEFT JOIN kursi k ON dp.kursi_id = k.id "
+                   + "WHERE p.user_id = ? "
+                   + "GROUP BY p.id, p.kode_tiket, u.nama, b.nama_bus, j.asal, j.tujuan, "
+                   + "j.tanggal_berangkat, j.jam_berangkat, p.jumlah_tiket, p.total_bayar, p.status "
+                   + "ORDER BY p.created_at DESC";
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            if (conn == null) {
+                JOptionPane.showMessageDialog(this, "Koneksi database tidak tersedia!");
+                tblRiwayatPemesanan.setModel(model);
+                return;
+            }
+
+            try (PreparedStatement pst = conn.prepareStatement(sql)) {
+                pst.setInt(1, userId);
+                try (ResultSet rs = pst.executeQuery()) {
+                    NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+                    while (rs.next()) {
+                        String rute = rs.getString("asal") + " - " + rs.getString("tujuan");
+                        String status = rs.getString("status");
+                        if (status == null || status.trim().isEmpty()) {
+                            status = "Belum Terverifikasi";
+                        }
+
+                        model.addRow(new Object[]{
+                            rs.getString("kode_tiket"),
+                            rs.getString("nama_user"),
+                            rs.getString("nama_bus"),
+                            rute,
+                            rs.getDate("tanggal_berangkat"),
+                            rs.getTime("jam_berangkat"),
+                            rs.getString("kursi") == null ? "-" : rs.getString("kursi"),
+                            rs.getInt("jumlah_tiket"),
+                            "Rp " + nf.format(rs.getDouble("total_bayar")),
+                            status
+                        });
+                    }
+                }
+            }
+            tblRiwayatPemesanan.setModel(model);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat riwayat pemesanan: " + ex.getMessage());
+            tblRiwayatPemesanan.setModel(model);
+        }
+    }
+
+    private void setupTableListener() {
+        tblRiwayatPemesanan.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int row = tblRiwayatPemesanan.getSelectedRow();
+                if (row >= 0) {
+                    onRiwayatSelected(row);
+                }
+            }
+        });
+    }
+
+    private void onRiwayatSelected(int row) {
+        int modelRow = tblRiwayatPemesanan.convertRowIndexToModel(row);
+
+        txtKodeTiket.setText(getTableValue(modelRow, 0));
+        txtNama.setText(getTableValue(modelRow, 1));
+        txtBus.setText(getTableValue(modelRow, 2));
+        txtRute.setText(getTableValue(modelRow, 3));
+        txtTanggal.setText(getTableValue(modelRow, 4));
+        txtJam.setText(getTableValue(modelRow, 5));
+        txtKursi.setText(getTableValue(modelRow, 6));
+        txtJumlahTiket.setText(getTableValue(modelRow, 7));
+        txtTotalBayar5.setText(getTableValue(modelRow, 8));
+        txtStatus.setText(getTableValue(modelRow, 9));
+
+        btnDownloadTiket.setEnabled("Terverifikasi".equalsIgnoreCase(txtStatus.getText().trim()));
+    }
+
+    private String getTableValue(int row, int column) {
+        Object value = tblRiwayatPemesanan.getModel().getValueAt(row, column);
+        return value == null ? "" : value.toString();
+    }
+
+    private void clearForm() {
+        txtKodeTiket.setText("");
+        txtNama.setText("");
+        txtBus.setText("");
+        txtRute.setText("");
+        txtTanggal.setText("");
+        txtJam.setText("");
+        txtKursi.setText("");
+        txtJumlahTiket.setText("");
+        txtTotalBayar5.setText("");
+        txtStatus.setText("");
+        btnDownloadTiket.setEnabled(false);
+    }
+
+    private void downloadTiket() {
+        if (txtKodeTiket.getText().trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Pilih riwayat pemesanan terlebih dahulu!");
+            return;
+        }
+
+        if (!"Terverifikasi".equalsIgnoreCase(txtStatus.getText().trim())) {
+            JOptionPane.showMessageDialog(this, "Tiket hanya bisa didapatkan jika status pembayaran sudah Terverifikasi.");
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Simpan Tiket");
+        chooser.setSelectedFile(new File("Tiket-" + txtKodeTiket.getText().trim() + ".txt"));
+
+        int result = chooser.showSaveDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File file = chooser.getSelectedFile();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            writer.println("TIKET AGEN TRAVEL BUS");
+            writer.println("=====================");
+            writer.println("Kode Tiket      : " + txtKodeTiket.getText());
+            writer.println("Nama            : " + txtNama.getText());
+            writer.println("Bus             : " + txtBus.getText());
+            writer.println("Rute            : " + txtRute.getText());
+            writer.println("Tanggal         : " + txtTanggal.getText());
+            writer.println("Jam             : " + txtJam.getText());
+            writer.println("Kursi           : " + txtKursi.getText());
+            writer.println("Jumlah Tiket    : " + txtJumlahTiket.getText());
+            writer.println("Total Bayar     : " + txtTotalBayar5.getText());
+            writer.println("Status          : " + txtStatus.getText());
+            JOptionPane.showMessageDialog(this, "Tiket berhasil disimpan: " + file.getAbsolutePath());
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal menyimpan tiket: " + ex.getMessage());
+        }
     }
 
     /**
@@ -220,7 +429,7 @@ public class jRiwayatPemesananPengguna extends javax.swing.JPanel {
                                     .addComponent(jLabel9)
                                     .addComponent(jLabel14)
                                     .addComponent(txtTanggal, javax.swing.GroupLayout.PREFERRED_SIZE, 270, javax.swing.GroupLayout.PREFERRED_SIZE))
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 44, Short.MAX_VALUE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                                 .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel4Layout.createSequentialGroup()
                                         .addGroup(jPanel4Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -292,7 +501,7 @@ public class jRiwayatPemesananPengguna extends javax.swing.JPanel {
                             .addComponent(txtStatus, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(jLabel16)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 44, Short.MAX_VALUE)
                         .addComponent(btnDownloadTiket)
                         .addGap(24, 24, 24))))
         );
@@ -320,26 +529,25 @@ public class jRiwayatPemesananPengguna extends javax.swing.JPanel {
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jScrollPane1)
                     .addComponent(jPanel3, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, 895, Short.MAX_VALUE))
-                .addContainerGap())
+                    .addComponent(jPanel4, javax.swing.GroupLayout.DEFAULT_SIZE, 857, Short.MAX_VALUE)))
         );
         jPanel2Layout.setVerticalGroup(
             jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
             .addGroup(jPanel2Layout.createSequentialGroup()
                 .addContainerGap()
                 .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 18, Short.MAX_VALUE)
-                .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, 302, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addGap(5, 5, 5)
-                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 101, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addContainerGap())
+                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, 351, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(34, 34, 34)
+                .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 140, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
         );
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(this);
         this.setLayout(layout);
         layout.setHorizontalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addComponent(jPanel2, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+            .addComponent(jPanel2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
         );
         layout.setVerticalGroup(
             layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)

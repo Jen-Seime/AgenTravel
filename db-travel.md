@@ -150,7 +150,7 @@ Menyimpan transaksi pemesanan tiket.
 | jadwal_id         | INT FK                      |
 | jumlah_tiket      | INT                         |
 | total_bayar       | DECIMAL(10,2)               |
-| status_pembayaran | ENUM('Belum Lunas','Lunas') |
+| metode_pembayaran | varcahr |
 | created_at        | DATETIME                    |
 
 Contoh:

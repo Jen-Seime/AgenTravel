@@ -58,15 +58,13 @@ public class JLoginPengguna extends javax.swing.JFrame {
             ResultSet rs = pst.executeQuery();
 
             if (rs.next()) {
-                JOptionPane.showMessageDialog(this, "Login berhasil. Selamat datang, " + rs.getString("nama"));
+                int    loggedUserId   = rs.getInt("id");
+                String loggedNamaUser = rs.getString("nama");
+                JOptionPane.showMessageDialog(this, "Login berhasil. Selamat datang, " + loggedNamaUser);
 
-                // Open jJadwalBusPengguna panel in a JFrame container
-                javax.swing.JFrame frame = new javax.swing.JFrame("Jadwal Bus Pengguna");
-                frame.setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-                frame.getContentPane().add(new jJadwalBusPengguna());
-                frame.pack();
-                frame.setLocationRelativeTo(null);
-                frame.setVisible(true);
+                // Buka dashboard pelanggan dengan data user yang login
+                dashboardPelanggan dashboard = new dashboardPelanggan(loggedUserId, loggedNamaUser);
+                dashboard.setVisible(true);
 
                 this.dispose();
             } else {

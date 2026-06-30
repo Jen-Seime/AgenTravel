@@ -4,6 +4,16 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+import java.text.NumberFormat;
+import java.util.Locale;
+
 /**
  *
  * @author LENOVO
@@ -15,6 +25,20 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
      */
     public jKelolaPembayaranAdmin() {
         initComponents();
+        txtKodeTiket.setEditable(false);
+        txtNamaUser.setEditable(false);
+        txtBus.setEditable(false);
+        txtRute.setEditable(false);
+        txtTotalBayar.setEditable(false);
+        
+        loadDataPembayaran();
+        setupTableListener();
+        
+        btnPerbarui.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                perbaruiStatus();
+            }
+        });
     }
 
     /**
@@ -44,7 +68,6 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
         jLabel12 = new javax.swing.JLabel();
         jScrollPane1 = new javax.swing.JScrollPane();
         tblKelolaPembayaran = new javax.swing.JTable();
-        btnSimpan = new javax.swing.JButton();
         btnPerbarui = new javax.swing.JButton();
 
         jPanel2.setBackground(new java.awt.Color(230, 242, 221));
@@ -199,11 +222,6 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
         tblKelolaPembayaran.setPreferredSize(new java.awt.Dimension(653, 208));
         jScrollPane1.setViewportView(tblKelolaPembayaran);
 
-        btnSimpan.setBackground(new java.awt.Color(101, 146, 135));
-        btnSimpan.setFont(new java.awt.Font("Perpetua Titling MT", 1, 12)); // NOI18N
-        btnSimpan.setForeground(new java.awt.Color(255, 255, 255));
-        btnSimpan.setText("SIMPAN");
-
         btnPerbarui.setBackground(new java.awt.Color(255, 236, 153));
         btnPerbarui.setFont(new java.awt.Font("Perpetua Titling MT", 1, 12)); // NOI18N
         btnPerbarui.setForeground(new java.awt.Color(255, 255, 255));
@@ -221,9 +239,7 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
                     .addGroup(jPanel2Layout.createSequentialGroup()
                         .addComponent(jPanel4, javax.swing.GroupLayout.PREFERRED_SIZE, 650, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 61, Short.MAX_VALUE)
-                        .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(btnSimpan, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(btnPerbarui, javax.swing.GroupLayout.DEFAULT_SIZE, 160, Short.MAX_VALUE))
+                        .addComponent(btnPerbarui, javax.swing.GroupLayout.PREFERRED_SIZE, 160, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addGap(0, 17, Short.MAX_VALUE)))
                 .addContainerGap())
         );
@@ -234,9 +250,7 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
                 .addComponent(jPanel3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGroup(jPanel2Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addGroup(jPanel2Layout.createSequentialGroup()
-                        .addGap(69, 69, 69)
-                        .addComponent(btnSimpan, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                        .addGap(116, 116, 116)
                         .addComponent(btnPerbarui, javax.swing.GroupLayout.PREFERRED_SIZE, 35, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, jPanel2Layout.createSequentialGroup()
@@ -259,6 +273,172 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
         );
     }// </editor-fold>//GEN-END:initComponents
 
+    private void loadDataPembayaran() {
+        DefaultTableModel model = new DefaultTableModel(
+            new String[]{"Kode Tiket", "Nama User", "Bus", "Rute", "Total Bayar", "Metode Pembayaran", "Status"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            if (conn == null) {
+                JOptionPane.showMessageDialog(this, "Koneksi database tidak tersedia!");
+                return;
+            }
+            String sql = "SELECT p.kode_tiket, u.nama AS nama_user, b.nama_bus, j.asal, j.tujuan, "
+                       + "p.total_bayar, p.metode_pembayaran, p.status "
+                       + "FROM pemesanan p "
+                       + "JOIN users u ON p.user_id = u.id "
+                       + "JOIN jadwal j ON p.jadwal_id = j.id "
+                       + "JOIN bus b ON j.bus_id = b.id "
+                       + "ORDER BY p.created_at DESC";
+            
+            Statement st = conn.createStatement();
+            ResultSet rs = st.executeQuery(sql);
+            NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+
+            while (rs.next()) {
+                String rute = rs.getString("asal") + " - " + rs.getString("tujuan");
+                double total = rs.getDouble("total_bayar");
+                String status = rs.getString("status");
+                if (status == null || status.trim().isEmpty()) {
+                    status = "Belum Terverifikasi";
+                }
+                model.addRow(new Object[]{
+                    rs.getString("kode_tiket"),
+                    rs.getString("nama_user"),
+                    rs.getString("nama_bus"),
+                    rute,
+                    "Rp " + nf.format(total),
+                    rs.getString("metode_pembayaran"),
+                    status
+                });
+            }
+
+            tblKelolaPembayaran.setModel(model);
+
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat data pembayaran: " + e.getMessage());
+        }
+    }
+
+    private void setupTableListener() {
+        tblKelolaPembayaran.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                int row = tblKelolaPembayaran.getSelectedRow();
+                if (row >= 0) {
+                    txtKodeTiket.setText(tblKelolaPembayaran.getValueAt(row, 0).toString());
+                    txtNamaUser.setText(tblKelolaPembayaran.getValueAt(row, 1).toString());
+                    txtBus.setText(tblKelolaPembayaran.getValueAt(row, 2).toString());
+                    txtRute.setText(tblKelolaPembayaran.getValueAt(row, 3).toString());
+                    txtTotalBayar.setText(tblKelolaPembayaran.getValueAt(row, 4).toString());
+                    
+                    String status = tblKelolaPembayaran.getValueAt(row, 6).toString();
+                    if ("Terverifikasi".equalsIgnoreCase(status)) {
+                        cmbStatus.setSelectedItem("Terverifikasi");
+                    } else if ("Tidak Terverifikasi".equalsIgnoreCase(status)) {
+                        cmbStatus.setSelectedItem("Tidak Terverifikasi");
+                    } else {
+                        cmbStatus.setSelectedItem(" ");
+                    }
+                }
+            }
+        });
+    }
+
+    private void perbaruiStatus() {
+        String kodeTiket = txtKodeTiket.getText().trim();
+        if (kodeTiket.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Pilih transaksi pembayaran terlebih dahulu dari tabel!");
+            return;
+        }
+
+        String statusBaru = cmbStatus.getSelectedItem().toString();
+        
+        Connection conn = AgenTravel.getKoneksi();
+        if (conn == null) {
+            JOptionPane.showMessageDialog(this, "Koneksi database tidak tersedia!");
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Apakah Anda yakin ingin memperbarui status pembayaran tiket " + kodeTiket + " menjadi '" + statusBaru + "'?",
+            "Konfirmasi Perbarui Status", JOptionPane.YES_NO_OPTION);
+        
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        try {
+            conn.setAutoCommit(false);
+
+            // 1. Update status pemesanan
+            String sqlUpdatePesan = "UPDATE pemesanan SET status = ? WHERE kode_tiket = ?";
+            try (PreparedStatement pstUpdate = conn.prepareStatement(sqlUpdatePesan)) {
+                pstUpdate.setString(1, statusBaru);
+                pstUpdate.setString(2, kodeTiket);
+                pstUpdate.executeUpdate();
+            }
+
+            // 2. Dapatkan pemesanan_id
+            int pemesananId = -1;
+            String sqlPemesananId = "SELECT id FROM pemesanan WHERE kode_tiket = ?";
+            try (PreparedStatement pstId = conn.prepareStatement(sqlPemesananId)) {
+                pstId.setString(1, kodeTiket);
+                try (ResultSet rsId = pstId.executeQuery()) {
+                    if (rsId.next()) {
+                        pemesananId = rsId.getInt("id");
+                    }
+                }
+            }
+
+            if (pemesananId != -1) {
+                // 3. Jika status baru adalah "Tidak Terverifikasi", lepas kursi (kembalikan ke 'Tersedia')
+                //    Jika status baru adalah "Terverifikasi" atau lainnya, set status kursi ke 'Dipesan'
+                String statusKursi = "Tidak Terverifikasi".equalsIgnoreCase(statusBaru) ? "Tersedia" : "Dipesan";
+                
+                String sqlUpdateKursi = "UPDATE kursi k "
+                                      + "JOIN detail_pemesanan dp ON k.id = dp.kursi_id "
+                                      + "SET k.status = ? "
+                                      + "WHERE dp.pemesanan_id = ?";
+                try (PreparedStatement pstKursi = conn.prepareStatement(sqlUpdateKursi)) {
+                    pstKursi.setString(1, statusKursi);
+                    pstKursi.setInt(2, pemesananId);
+                    pstKursi.executeUpdate();
+                }
+            }
+
+            conn.commit();
+            JOptionPane.showMessageDialog(this, "Status pembayaran berhasil diperbarui!");
+            clearForm();
+            loadDataPembayaran();
+
+        } catch (SQLException ex) {
+            try {
+                conn.rollback();
+            } catch (SQLException ignored) {}
+            JOptionPane.showMessageDialog(this, "Gagal memperbarui status pembayaran: " + ex.getMessage());
+        } finally {
+            try {
+                conn.setAutoCommit(true);
+            } catch (SQLException ignored) {}
+        }
+    }
+
+    private void clearForm() {
+        txtKodeTiket.setText("");
+        txtNamaUser.setText("");
+        txtBus.setText("");
+        txtRute.setText("");
+        txtTotalBayar.setText("");
+        cmbStatus.setSelectedIndex(2); // Set ke default " "
+    }
+
     private void txtTotalBayarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_txtTotalBayarActionPerformed
         // TODO add your handling code here:
     }//GEN-LAST:event_txtTotalBayarActionPerformed
@@ -274,7 +454,6 @@ public class jKelolaPembayaranAdmin extends javax.swing.JPanel {
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton btnPerbarui;
-    private javax.swing.JButton btnSimpan;
     private javax.swing.JComboBox<String> cmbStatus;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel10;

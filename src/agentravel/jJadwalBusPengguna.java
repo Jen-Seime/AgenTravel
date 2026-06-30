@@ -4,17 +4,92 @@
  */
 package agentravel;
 
+import java.awt.Color;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import javax.swing.JButton;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
 /**
  *
  * @author User
  */
 public class jJadwalBusPengguna extends javax.swing.JPanel {
 
+    // ── State ──────────────────────────────────────────────────────────────
+    /** ID user yang sedang login; set via setUserId() */
+    private int userId = -1;
+    /** Nama user yang sedang login */
+    private String namaUser = "";
+    /** jadwal_id yang sedang dipilih dari tabel */
+    private int selectedJadwalId = -1;
+    /** harga_tiket bus pada jadwal yang dipilih */
+    private double hargaSatuan = 0;
+    /** Nama bus jadwal yang dipilih */
+    private String namaBus = "";
+    /** Asal jadwal yang dipilih */
+    private String asalBus = "";
+    /** Tujuan jadwal yang dipilih */
+    private String tujuanBus = "";
+
+    /**
+     * Map: nomor_kursi → kursi_id  (untuk semua kursi pada jadwal terpilih)
+     * Diisi ulang setiap kali jadwal berubah.
+     */
+    private final Map<String, Integer> kursiIdMap = new HashMap<>();
+
+    /**
+     * Set kursi yang sudah terisi (status='Dipesan') dari DB.
+     */
+    private final java.util.Set<String> kursiTerisi = new java.util.HashSet<>();
+
+    /**
+     * Daftar nomor kursi yang sedang dipilih oleh user saat ini.
+     */
+    private final List<String> kursiDipilih = new ArrayList<>();
+
+    /** Warna-warna untuk status kursi */
+    private static final Color COLOR_TERSEDIA = new Color(204, 255, 204);  // hijau muda
+    private static final Color COLOR_TERISI   = new Color(255, 102, 102);  // merah
+    private static final Color COLOR_DIPILIH  = new Color(102, 51, 255);   // ungu
+    private static final Color COLOR_DEFAULT  = new Color(240, 240, 240);  // abu
+
+    /** Semua button kursi dalam urutan sesuai label */
+    private JButton[] seatButtons;
+
     /**
      * Creates new form jJadwalBusPengguna
      */
     public jJadwalBusPengguna() {
         initComponents();
+        initSeatButtons();
+        loadJadwal();
+        setupTableListener();
+        // Nonaktifkan tombol Pesan & area kursi sampai jadwal dipilih
+        btnSimpan.setEnabled(false);
+        setSeatButtonsEnabled(false);
+        // Hubungkan btnSimpan ke doSimpanPemesanan
+        btnSimpan.addActionListener(evt -> doSimpanPemesanan());
+    }
+
+    /**
+     * Set user yang sedang login. Dipanggil dari dashboardPelanggan atau login.
+     */
+    public void setUserId(int userId, String namaUser) {
+        this.userId = userId;
+        this.namaUser = namaUser;
+        jTextField7.setText(namaUser);
+        jTextField7.setEditable(false);
     }
 
     /**
@@ -491,18 +566,18 @@ public class jJadwalBusPengguna extends javax.swing.JPanel {
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(jButton56, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE))
                             .addGroup(jPanel6Layout.createSequentialGroup()
-                                .addComponent(jButton48, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton53, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton57, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE))
-                            .addGroup(jPanel6Layout.createSequentialGroup()
                                 .addComponent(jButton49, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                                 .addComponent(btnA18, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(jButton58, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)))
-                        .addGap(30, 30, 30)
+                                .addComponent(jButton58, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addGroup(jPanel6Layout.createSequentialGroup()
+                                .addComponent(jButton48, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButton53, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                .addComponent(jButton57, javax.swing.GroupLayout.PREFERRED_SIZE, 54, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                        .addGap(18, 18, 18)
                         .addGroup(jPanel6Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addGroup(jPanel6Layout.createSequentialGroup()
                                 .addComponent(jButton42, javax.swing.GroupLayout.PREFERRED_SIZE, 42, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -838,24 +913,389 @@ public class jJadwalBusPengguna extends javax.swing.JPanel {
         );
     }// </editor-fold>//GEN-END:initComponents
 
+    // =========================================================================
+    //  INISIALISASI HELPER
+    // =========================================================================
+
+    /**
+     * Inisialisasi 36 button kursi dari form:
+     *  – 26 button pertama (urut baris, kiri→kanan) diberi label A1–A26 dan aktif.
+     *  – 10 button sisanya disembunyikan (setVisible false).
+     *
+     * Urutan fisik baris per baris di dalam jPanel6:
+     *   Baris 1 : jButton39, jButton40, jButton41 | jButton42, jButton43, jButton44
+     *   Baris 2 : jButton45, jButton50, jButton54 | jButton59, jButton60, jButton61
+     *   Baris 3 : jButton46, jButton51, jButton55 | jButton66, jButton67, jButton62
+     *   Baris 4 : jButton47, jButton52, jButton56 | jButton71, jButton68, jButton63
+     *   Baris 5 : jButton48, jButton53, jButton57 | jButton72, jButton69, jButton64
+     *   Baris 6 : jButton49, btnA18,   jButton58  | jButton73, jButton70, jButton65
+     */
+    private void initSeatButtons() {
+        // Seluruh 36 button fisik, urut baris kiri→kanan
+        JButton[] allButtons = {
+            // Baris 1
+            jButton39, jButton40, jButton41, jButton42, jButton43, jButton44,
+            // Baris 2
+            jButton45, jButton50, jButton54, jButton59, jButton60, jButton61,
+            // Baris 3
+            jButton46, jButton51, jButton55, jButton66, jButton67, jButton62,
+            // Baris 4
+            jButton47, jButton52, jButton56, jButton71, jButton68, jButton63,
+            // Baris 5 – hanya 2 kursi pertama aktif (A25, A26)
+            jButton48, jButton53,
+            // Baris 5 sisa + Baris 6 – semua disembunyikan (10 button)
+            jButton57, jButton72, jButton69, jButton64,
+            jButton49, btnA18, jButton58, jButton73, jButton70, jButton65
+        };
+
+        // Sembunyikan 10 button terakhir
+        int TOTAL_KURSI = 26;
+        for (int i = TOTAL_KURSI; i < allButtons.length; i++) {
+            allButtons[i].setVisible(false);
+        }
+
+        // Buat array aktif hanya 26 kursi
+        seatButtons = new JButton[TOTAL_KURSI];
+        for (int i = 0; i < TOTAL_KURSI; i++) {
+            seatButtons[i] = allButtons[i];
+        }
+
+        // Label A1–A26 dan listener
+        for (int i = 0; i < TOTAL_KURSI; i++) {
+            final String nomorKursi = "A" + (i + 1);
+            seatButtons[i].setText(nomorKursi);
+            seatButtons[i].setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, 9));
+            seatButtons[i].setBackground(COLOR_DEFAULT);
+            seatButtons[i].setOpaque(true);
+            seatButtons[i].setVisible(true);
+            seatButtons[i].addActionListener(evt -> toggleKursi(nomorKursi));
+        }
+    }
+
+    /** Aktifkan/nonaktifkan semua button kursi */
+    private void setSeatButtonsEnabled(boolean enabled) {
+        if (seatButtons == null) return;
+        for (JButton btn : seatButtons) {
+            btn.setEnabled(enabled);
+        }
+    }
+
+    // =========================================================================
+    //  LOAD JADWAL KE TABEL
+    // =========================================================================
+
+    /** Muat semua jadwal dari database ke jTable1 */
+    private void loadJadwal() {
+        DefaultTableModel model = (DefaultTableModel) jTable1.getModel();
+        model.setRowCount(0);
+
+        String sql = "SELECT j.id, b.nama_bus, j.asal, j.tujuan, "
+                   + "j.tanggal_berangkat, j.jam_berangkat, b.harga_tiket "
+                   + "FROM jadwal j JOIN bus b ON j.bus_id = b.id "
+                   + "ORDER BY j.tanggal_berangkat, j.jam_berangkat";
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            if (conn == null) return;
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery(sql)) {
+                NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                        rs.getInt("id"),          // kolom tersembunyi – jadwal_id
+                        rs.getString("nama_bus"),
+                        rs.getString("asal"),
+                        rs.getString("tujuan"),
+                        rs.getDate("tanggal_berangkat"),
+                        rs.getTime("jam_berangkat"),
+                        "Rp " + nf.format(rs.getDouble("harga_tiket"))
+                    });
+                }
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat jadwal: " + ex.getMessage());
+        }
+
+        // Sembunyikan kolom ID (kolom 0) agar tidak terlihat user
+        if (jTable1.getColumnCount() > 0) {
+            jTable1.getColumnModel().getColumn(0).setMinWidth(0);
+            jTable1.getColumnModel().getColumn(0).setMaxWidth(0);
+            jTable1.getColumnModel().getColumn(0).setWidth(0);
+        }
+    }
+
+    /** Daftarkan listener seleksi baris tabel → load kursi & isi form */
+    private void setupTableListener() {
+        jTable1.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int row = jTable1.getSelectedRow();
+                if (row >= 0) {
+                    onJadwalSelected(row);
+                }
+            }
+        });
+    }
+
+    /** Dipanggil saat baris jadwal dipilih */
+    private void onJadwalSelected(int row) {
+        DefaultTableModel model = (DefaultTableModel) jTable1.getModel();
+        selectedJadwalId = (int) model.getValueAt(row, 0);
+        namaBus  = model.getValueAt(row, 1).toString();
+        asalBus  = model.getValueAt(row, 2).toString();
+        tujuanBus = model.getValueAt(row, 3).toString();
+        String hargaStr = model.getValueAt(row, 6).toString()
+                               .replace("Rp ", "").replace(".", "").replace(",", ".").trim();
+        try { hargaSatuan = Double.parseDouble(hargaStr); } catch (NumberFormatException ex) { hargaSatuan = 0; }
+
+        // Isi field info jadwal
+        jTextField11.setText(namaBus);
+        jTextField12.setText(asalBus);
+        jTextField9.setText(tujuanBus);
+        NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id","ID"));
+        jTextField13.setText("Rp " + nf.format(hargaSatuan));
+
+        // Reset pilihan kursi
+        kursiDipilih.clear();
+        jTextField10.setText("0");
+        jTextField14.setText("Rp 0");
+        jTextField8.setText("");
+
+        // Load status kursi dari DB
+        loadKursiStatus(selectedJadwalId);
+        setSeatButtonsEnabled(true);
+        btnSimpan.setEnabled(true);
+    }
+
+    // =========================================================================
+    //  LOAD STATUS KURSI
+    // =========================================================================
+
+    /** Ambil status tiap kursi dari tabel `kursi` dan warnai button */
+    private void loadKursiStatus(int jadwalId) {
+        kursiIdMap.clear();
+        kursiTerisi.clear();
+        kursiDipilih.clear();
+
+        // Reset semua button ke abu
+        for (JButton btn : seatButtons) {
+            btn.setBackground(COLOR_DEFAULT);
+            btn.setEnabled(false);
+        }
+
+        String sql = "SELECT nomor_kursi, id, status FROM kursi WHERE jadwal_id = ?";
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            if (conn == null) return;
+            try (PreparedStatement pst = conn.prepareStatement(sql)) {
+                pst.setInt(1, jadwalId);
+                try (ResultSet rs = pst.executeQuery()) {
+                    while (rs.next()) {
+                        String nomor  = rs.getString("nomor_kursi");
+                        int    kursiId = rs.getInt("id");
+                        String status = rs.getString("status");
+                        kursiIdMap.put(nomor, kursiId);
+                        if ("Dipesan".equalsIgnoreCase(status)) {
+                            kursiTerisi.add(nomor);
+                        }
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat kursi: " + ex.getMessage());
+            return;
+        }
+
+        // Warnai button sesuai status, aktifkan hanya yang tersedia
+        for (JButton btn : seatButtons) {
+            String nomor = btn.getText();
+            if (!kursiIdMap.containsKey(nomor)) {
+                // Kursi tidak ada pada jadwal ini (misal bus hanya 36 kursi)
+                btn.setBackground(COLOR_DEFAULT);
+                btn.setEnabled(false);
+            } else if (kursiTerisi.contains(nomor)) {
+                btn.setBackground(COLOR_TERISI);
+                btn.setEnabled(false);
+            } else {
+                btn.setBackground(COLOR_TERSEDIA);
+                btn.setEnabled(true);
+            }
+        }
+
+        // Update counter legend
+        int terisi   = kursiTerisi.size();
+        int tersedia = kursiIdMap.size() - terisi;
+        jLabel11.setText("Kursi Terisi (" + terisi + ")");
+        jLabel13.setText("Kursi Tersedia (" + tersedia + ")");
+        jLabel12.setText("Kursi Dipilih (0)");
+    }
+
+    // =========================================================================
+    //  TOGGLE PILIH KURSI
+    // =========================================================================
+
+    /** Toggle pilih/batal kursi saat button kursi diklik */
+    private void toggleKursi(String nomorKursi) {
+        if (kursiTerisi.contains(nomorKursi)) return; // Sudah dipesan, abaikan
+
+        JButton btn = getSeatButton(nomorKursi);
+        if (btn == null) return;
+
+        if (kursiDipilih.contains(nomorKursi)) {
+            // Batal pilih
+            kursiDipilih.remove(nomorKursi);
+            btn.setBackground(COLOR_TERSEDIA);
+        } else {
+            // Pilih
+            kursiDipilih.add(nomorKursi);
+            btn.setBackground(COLOR_DIPILIH);
+        }
+
+        // Update form
+        jTextField10.setText(String.valueOf(kursiDipilih.size()));
+        jLabel12.setText("Kursi Dipilih (" + kursiDipilih.size() + ")");
+        jTextField8.setText(String.join(", ", kursiDipilih));
+
+        // Hitung total
+        double total = hargaSatuan * kursiDipilih.size();
+        NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+        jTextField14.setText("Rp " + nf.format(total));
+    }
+
+    /** Cari JButton berdasarkan label teks nomor kursi */
+    private JButton getSeatButton(String nomorKursi) {
+        for (JButton btn : seatButtons) {
+            if (btn.getText().equals(nomorKursi)) return btn;
+        }
+        return null;
+    }
+
+    // =========================================================================
+    //  SIMPAN PEMESANAN
+    // =========================================================================
+
+    /** Dipanggil saat btnSimpan ("Pesan") diklik */
+    private void doSimpanPemesanan() {
+        // Validasi user login
+        if (userId <= 0) {
+            JOptionPane.showMessageDialog(this, "Silakan login terlebih dahulu!");
+            return;
+        }
+        // Validasi jadwal dipilih
+        if (selectedJadwalId <= 0) {
+            JOptionPane.showMessageDialog(this, "Pilih jadwal keberangkatan terlebih dahulu!");
+            return;
+        }
+        // Validasi kursi dipilih
+        if (kursiDipilih.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Pilih minimal 1 kursi!");
+            return;
+        }
+        // Validasi metode pembayaran
+        String metodePembayaran = jComboBox3.getSelectedItem().toString();
+        if (metodePembayaran.startsWith("===")) {
+            JOptionPane.showMessageDialog(this, "Pilih metode pembayaran!");
+            return;
+        }
+
+        // Konfirmasi
+        double total = hargaSatuan * kursiDipilih.size();
+        NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id","ID"));
+        int confirm = JOptionPane.showConfirmDialog(this,
+            "Konfirmasi Pemesanan:\n"
+            + "Bus       : " + namaBus + "\n"
+            + "Rute      : " + asalBus + " → " + tujuanBus + "\n"
+            + "Kursi     : " + String.join(", ", kursiDipilih) + "\n"
+            + "Jumlah    : " + kursiDipilih.size() + " tiket\n"
+            + "Total     : Rp " + nf.format(total) + "\n"
+            + "Pembayaran: " + metodePembayaran + "\n\n"
+            + "Lanjutkan?",
+            "Konfirmasi", JOptionPane.YES_NO_OPTION);
+
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        Connection conn = AgenTravel.getKoneksi();
+        if (conn == null) return;
+
+        try {
+            conn.setAutoCommit(false);
+
+            // 1. Generate kode tiket
+            String kodeTiket = "TKT" + System.currentTimeMillis();
+
+            // 2. Insert ke tabel pemesanan
+            String sqlPesan = "INSERT INTO pemesanan "
+                + "(kode_tiket, user_id, jadwal_id, jumlah_tiket, total_bayar, metode_pembayaran, created_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, NOW())";
+            int pemesananId;
+            try (PreparedStatement pst = conn.prepareStatement(sqlPesan, Statement.RETURN_GENERATED_KEYS)) {
+                pst.setString(1, kodeTiket);
+                pst.setInt(2, userId);
+                pst.setInt(3, selectedJadwalId);
+                pst.setInt(4, kursiDipilih.size());
+                pst.setDouble(5, total);
+                pst.setString(6, metodePembayaran);
+                pst.executeUpdate();
+                try (ResultSet gk = pst.getGeneratedKeys()) {
+                    gk.next();
+                    pemesananId = gk.getInt(1);
+                }
+            }
+
+            // 3. Insert detail_pemesanan + update status kursi
+            String sqlDetail = "INSERT INTO detail_pemesanan (pemesanan_id, kursi_id) VALUES (?, ?)";
+            String sqlUpdateKursi = "UPDATE kursi SET status = 'Dipesan' WHERE id = ?";
+            try (PreparedStatement pstDetail = conn.prepareStatement(sqlDetail);
+                 PreparedStatement pstKursi  = conn.prepareStatement(sqlUpdateKursi)) {
+                for (String nomor : kursiDipilih) {
+                    int kursiId = kursiIdMap.get(nomor);
+                    pstDetail.setInt(1, pemesananId);
+                    pstDetail.setInt(2, kursiId);
+                    pstDetail.executeUpdate();
+
+                    pstKursi.setInt(1, kursiId);
+                    pstKursi.executeUpdate();
+                }
+            }
+
+            conn.commit();
+
+            JOptionPane.showMessageDialog(this,
+                "Pemesanan berhasil!\nKode Tiket: " + kodeTiket
+                + "\nSilakan lakukan pembayaran sesuai metode yang dipilih.");
+
+            // Refresh kursi setelah pemesanan
+            loadKursiStatus(selectedJadwalId);
+            loadJadwal();
+
+        } catch (SQLException ex) {
+            try { conn.rollback(); } catch (SQLException ignored) {}
+            JOptionPane.showMessageDialog(this, "Gagal menyimpan pemesanan: " + ex.getMessage());
+        } finally {
+            try { conn.setAutoCommit(true); } catch (SQLException ignored) {}
+        }
+    }
+
+    // =========================================================================
+    //  GEN EVENT HANDLERS
+    // =========================================================================
+
+    // jButton16 = button warna MERAH (legenda kursi terisi) – tidak perlu aksi
     private void jButton16ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton16ActionPerformed
-        // TODO add your handling code here:
+        // Legenda – tidak ada aksi
     }//GEN-LAST:event_jButton16ActionPerformed
 
     private void jButton37ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton37ActionPerformed
-        // TODO add your handling code here:
+        // Legenda – tidak ada aksi
     }//GEN-LAST:event_jButton37ActionPerformed
 
     private void jButton38ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton38ActionPerformed
-        // TODO add your handling code here:
+        // Legenda – tidak ada aksi
     }//GEN-LAST:event_jButton38ActionPerformed
 
+    // Seat buttons – semuanya sudah ditangani oleh toggleKursi() via initSeatButtons()
     private void jButton39ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton39ActionPerformed
-        // TODO add your handling code here:
     }//GEN-LAST:event_jButton39ActionPerformed
 
     private void jButton40ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton40ActionPerformed
-        // TODO add your handling code here:
     }//GEN-LAST:event_jButton40ActionPerformed
 
     private void jButton41ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton41ActionPerformed
@@ -987,15 +1427,13 @@ public class jJadwalBusPengguna extends javax.swing.JPanel {
     }//GEN-LAST:event_jButton71ActionPerformed
 
     private void jButton72ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton72ActionPerformed
-        // TODO add your handling code here:
     }//GEN-LAST:event_jButton72ActionPerformed
 
     private void jButton73ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton73ActionPerformed
-        // TODO add your handling code here:
     }//GEN-LAST:event_jButton73ActionPerformed
 
     private void jTextField11ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jTextField11ActionPerformed
-        // TODO add your handling code here:
+        // Nama bus – read-only, tidak ada aksi
     }//GEN-LAST:event_jTextField11ActionPerformed
 
 
@@ -1040,8 +1478,6 @@ public class jJadwalBusPengguna extends javax.swing.JPanel {
     private javax.swing.JButton jButton71;
     private javax.swing.JButton jButton72;
     private javax.swing.JButton jButton73;
-    private javax.swing.JComboBox<String> jComboBox1;
-    private javax.swing.JComboBox<String> jComboBox2;
     private javax.swing.JComboBox<String> jComboBox3;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel11;
@@ -1053,37 +1489,21 @@ public class jJadwalBusPengguna extends javax.swing.JPanel {
     private javax.swing.JLabel jLabel17;
     private javax.swing.JLabel jLabel18;
     private javax.swing.JLabel jLabel19;
-    private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel20;
     private javax.swing.JLabel jLabel21;
     private javax.swing.JLabel jLabel22;
     private javax.swing.JLabel jLabel23;
-    private javax.swing.JLabel jLabel3;
-    private javax.swing.JLabel jLabel4;
-    private javax.swing.JLabel jLabel5;
-    private javax.swing.JLabel jLabel6;
-    private javax.swing.JLabel jLabel7;
-    private javax.swing.JLabel jLabel8;
-    private javax.swing.JLabel jLabel9;
-    private javax.swing.JPanel jPanel1;
-    private javax.swing.JPanel jPanel2;
     private javax.swing.JPanel jPanel3;
     private javax.swing.JPanel jPanel4;
     private javax.swing.JPanel jPanel6;
     private javax.swing.JPanel jPanel7;
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JTable jTable1;
-    private javax.swing.JTextField jTextField1;
     private javax.swing.JTextField jTextField10;
     private javax.swing.JTextField jTextField11;
     private javax.swing.JTextField jTextField12;
     private javax.swing.JTextField jTextField13;
     private javax.swing.JTextField jTextField14;
-    private javax.swing.JTextField jTextField2;
-    private javax.swing.JTextField jTextField3;
-    private javax.swing.JTextField jTextField4;
-    private javax.swing.JTextField jTextField5;
-    private javax.swing.JTextField jTextField6;
     private javax.swing.JTextField jTextField7;
     private javax.swing.JTextField jTextField8;
     private javax.swing.JTextField jTextField9;
