@@ -4,6 +4,22 @@
  */
 package agentravel;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
+import javax.swing.table.DefaultTableModel;
+
 /**
  *
  * @author ACER NITRO V15
@@ -15,6 +31,139 @@ public class jPanelLaporanPemesananTiketAdmin extends javax.swing.JPanel {
      */
     public jPanelLaporanPemesananTiketAdmin() {
         initComponents();
+        setupForm();
+        loadLaporanPemesanan();
+    }
+
+    private void setupForm() {
+        jTextField1.setEditable(false);
+    }
+
+    private void loadLaporanPemesanan() {
+        DefaultTableModel model = new DefaultTableModel(
+            new String[]{"Kode", "Nama", "Bus", "Rute", "Tanggal Pesan", "Kursi", "Total", "Status"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+
+        String sql = "SELECT p.kode_tiket, u.nama AS nama_user, b.nama_bus, j.asal, j.tujuan, "
+                   + "p.created_at, "
+                   + "GROUP_CONCAT(k.nomor_kursi ORDER BY k.nomor_kursi SEPARATOR ', ') AS kursi, "
+                   + "p.total_bayar, p.status "
+                   + "FROM pemesanan p "
+                   + "JOIN users u ON p.user_id = u.id "
+                   + "JOIN jadwal j ON p.jadwal_id = j.id "
+                   + "JOIN bus b ON j.bus_id = b.id "
+                   + "LEFT JOIN detail_pemesanan dp ON p.id = dp.pemesanan_id "
+                   + "LEFT JOIN kursi k ON dp.kursi_id = k.id "
+                   + "GROUP BY p.id, p.kode_tiket, u.nama, b.nama_bus, j.asal, j.tujuan, "
+                   + "p.created_at, p.total_bayar, p.status "
+                   + "ORDER BY p.created_at DESC";
+
+        double totalPendapatan = 0;
+        NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            if (conn == null) {
+                JOptionPane.showMessageDialog(this, "Koneksi database tidak tersedia!");
+                jTable1.setModel(model);
+                setTotalPendapatan(0);
+                return;
+            }
+
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery(sql)) {
+                while (rs.next()) {
+                    String status = rs.getString("status");
+                    if (status == null || status.trim().isEmpty()) {
+                        status = "Belum Terverifikasi";
+                    }
+
+                    double totalBayar = rs.getDouble("total_bayar");
+                    if ("Terverifikasi".equalsIgnoreCase(status)) {
+                        totalPendapatan += totalBayar;
+                    }
+
+                    String rute = rs.getString("asal") + " - " + rs.getString("tujuan");
+                    String kursi = rs.getString("kursi");
+                    if (kursi == null || kursi.trim().isEmpty()) {
+                        kursi = "-";
+                    }
+
+                    model.addRow(new Object[]{
+                        rs.getString("kode_tiket"),
+                        rs.getString("nama_user"),
+                        rs.getString("nama_bus"),
+                        rute,
+                        rs.getTimestamp("created_at"),
+                        kursi,
+                        "Rp " + nf.format(totalBayar),
+                        status
+                    });
+                }
+            }
+
+            jTable1.setModel(model);
+            setTotalPendapatan(totalPendapatan);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat laporan pemesanan: " + ex.getMessage());
+            jTable1.setModel(model);
+            setTotalPendapatan(0);
+        }
+    }
+
+    private void setTotalPendapatan(double totalPendapatan) {
+        NumberFormat nf = NumberFormat.getNumberInstance(new Locale("id", "ID"));
+        jTextField1.setText("TOTAL PENDAPATAN : Rp " + nf.format(totalPendapatan));
+    }
+
+    private void cetakLaporan() {
+        if (jTable1.getRowCount() == 0) {
+            JOptionPane.showMessageDialog(this, "Tidak ada data laporan untuk dicetak!");
+            return;
+        }
+
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("Simpan Laporan Pemesanan");
+        chooser.setSelectedFile(new File("Laporan-Pemesanan-Tiket.txt"));
+
+        int result = chooser.showSaveDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        File file = chooser.getSelectedFile();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
+            writer.println("LAPORAN PEMESANAN TIKET");
+            writer.println("Tanggal Cetak: " + new SimpleDateFormat("dd-MM-yyyy HH:mm:ss").format(new Date()));
+            writer.println("============================================================");
+
+            for (int row = 0; row < jTable1.getRowCount(); row++) {
+                writer.println("Kode Tiket : " + getValue(row, 0));
+                writer.println("Nama       : " + getValue(row, 1));
+                writer.println("Bus        : " + getValue(row, 2));
+                writer.println("Rute       : " + getValue(row, 3));
+                writer.println("Tgl Pesan  : " + getValue(row, 4));
+                writer.println("Kursi      : " + getValue(row, 5));
+                writer.println("Total      : " + getValue(row, 6));
+                writer.println("Status     : " + getValue(row, 7));
+                writer.println("------------------------------------------------------------");
+            }
+
+            writer.println(jTextField1.getText());
+            JOptionPane.showMessageDialog(this, "Laporan berhasil disimpan: " + file.getAbsolutePath());
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal mencetak laporan: " + ex.getMessage());
+        }
+    }
+
+    private String getValue(int row, int column) {
+        Object value = jTable1.getValueAt(row, column);
+        return value == null ? "" : value.toString();
     }
 
     /**
@@ -162,7 +311,7 @@ public class jPanelLaporanPemesananTiketAdmin extends javax.swing.JPanel {
     }//GEN-LAST:event_jTextField1ActionPerformed
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
-        // TODO add your handling code here:
+        cetakLaporan();
     }//GEN-LAST:event_jButton1ActionPerformed
 
 

@@ -4,6 +4,11 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import javax.swing.JOptionPane;
+
 /**
  *
  * @author ACER NITRO V15
@@ -15,6 +20,62 @@ public class JLoginPengguna extends javax.swing.JFrame {
      */
     public JLoginPengguna() {
         initComponents();
+        setLocationRelativeTo(null);
+        jPasswordField1.setText("");
+        
+        jButton1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                jButton1ActionPerformed(evt);
+            }
+        });
+        
+        jLabel3.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        jLabel3.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                new jDaftarAkunPengguna().setVisible(true);
+                dispose();
+            }
+        });
+    }
+
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {
+        String username = jTextField1.getText().trim();
+        String password = new String(jPasswordField1.getPassword());
+
+        if (username.isEmpty() || username.equals("Masukan Username...") || password.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Username dan password harus diisi!");
+            return;
+        }
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+
+            String sql = "SELECT * FROM users WHERE nama = ? AND password = ?";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setString(1, username);
+            pst.setString(2, password);
+
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                int    loggedUserId   = rs.getInt("id");
+                String loggedNamaUser = rs.getString("nama");
+                JOptionPane.showMessageDialog(this, "Login berhasil. Selamat datang, " + loggedNamaUser);
+
+                // Buka dashboard pelanggan dengan data user yang login
+                dashboardPelanggan dashboard = new dashboardPelanggan(loggedUserId, loggedNamaUser);
+                dashboard.setVisible(true);
+
+                this.dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Username atau password salah!");
+                jPasswordField1.setText("");
+                jTextField1.requestFocus();
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Terjadi kesalahan login: " + e.getMessage());
+        }
     }
 
     /**
@@ -46,7 +107,6 @@ public class JLoginPengguna extends javax.swing.JFrame {
         jLabel2.setText("HALO, SOBAT TRAVEL!");
 
         jTextField1.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
-        jTextField1.setText("Masukan Username...");
         jTextField1.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 jTextField1ActionPerformed(evt);
@@ -60,8 +120,6 @@ public class JLoginPengguna extends javax.swing.JFrame {
         jButton1.setFont(new java.awt.Font("Perpetua Titling MT", 1, 18)); // NOI18N
         jButton1.setForeground(new java.awt.Color(255, 255, 255));
         jButton1.setText("LOGIN");
-
-        jPasswordField1.setText("jPasswordField1");
 
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);

@@ -4,6 +4,11 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import javax.swing.JOptionPane;
+
 /**
  *
  * @author User
@@ -15,6 +20,47 @@ public class JLoginAdmin extends javax.swing.JFrame {
      */
     public JLoginAdmin() {
         initComponents();
+        setLocationRelativeTo(null);
+        setMinimumSize(new java.awt.Dimension(800, 500));
+    }
+    
+    private void prosesLogin() {
+        String username = txtUser.getText();
+        String password = txtPass.getText();
+
+        if (username.isEmpty() || password.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Username dan password harus diisi!");
+            return;
+        }
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+
+            String sql = "SELECT * FROM admin WHERE username = ? AND password = ?";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setString(1, username);
+            pst.setString(2, password);
+
+            ResultSet rs = pst.executeQuery();
+
+            if (rs.next()) {
+                JOptionPane.showMessageDialog(this, "Login berhasil. Selamat datang, "
+                        + rs.getString("nama"));
+
+                dashboardAdmin menu = new dashboardAdmin();
+                menu.setVisible(true);
+                menu.setLocationRelativeTo(null);
+
+                this.dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Username atau password salah!");
+                txtPass.setText("");
+                txtUser.requestFocus();
+            }
+
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Terjadi kesalahan login: " + e.getMessage());
+        }
     }
 
     /**
@@ -149,6 +195,7 @@ public class JLoginAdmin extends javax.swing.JFrame {
 
     private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
         // TODO add your handling code here:
+        prosesLogin();
     }//GEN-LAST:event_jButton1ActionPerformed
 
     /**

@@ -4,6 +4,11 @@
  */
 package agentravel;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import javax.swing.JOptionPane;
+
 /**
  *
  * @author User
@@ -15,6 +20,16 @@ public class jDaftarAkunPengguna extends javax.swing.JFrame {
      */
     public jDaftarAkunPengguna() {
         initComponents();
+        setLocationRelativeTo(null);
+        txtPass.setText("");
+        jLabel4.setText("Sudah punya akun? Login!");
+        jLabel4.setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+        jLabel4.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                new JLoginPengguna().setVisible(true);
+                dispose();
+            }
+        });
     }
 
     /**
@@ -52,7 +67,6 @@ public class jDaftarAkunPengguna extends javax.swing.JFrame {
         jLabel3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Agent.png"))); // NOI18N
 
         txtEmail.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
-        txtEmail.setText("Masukkan Alamat Email Anda");
         txtEmail.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 txtEmailActionPerformed(evt);
@@ -60,7 +74,6 @@ public class jDaftarAkunPengguna extends javax.swing.JFrame {
         });
 
         txtNomor.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
-        txtNomor.setText("Masukkan Nomor Handhpone Anda");
         txtNomor.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 txtNomorActionPerformed(evt);
@@ -68,14 +81,11 @@ public class jDaftarAkunPengguna extends javax.swing.JFrame {
         });
 
         txtUser.setFont(new java.awt.Font("Perpetua", 0, 12)); // NOI18N
-        txtUser.setText("Masukkan Username Anda");
         txtUser.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 txtUserActionPerformed(evt);
             }
         });
-
-        txtPass.setText("jPasswordField1");
 
         btnDaftar.setBackground(new java.awt.Color(101, 146, 135));
         btnDaftar.setFont(new java.awt.Font("Perpetua Titling MT", 1, 14)); // NOI18N
@@ -195,7 +205,54 @@ public class jDaftarAkunPengguna extends javax.swing.JFrame {
     }//GEN-LAST:event_txtUserActionPerformed
 
     private void btnDaftarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnDaftarActionPerformed
-        // TODO add your handling code here:
+        String username = txtUser.getText().trim();
+        String email = txtEmail.getText().trim();
+        String nomor = txtNomor.getText().trim();
+        String password = new String(txtPass.getPassword());
+
+        if (username.isEmpty() || username.equals("Masukkan Username Anda") ||
+            email.isEmpty() || email.equals("Masukkan Alamat Email Anda") ||
+            nomor.isEmpty() || nomor.equals("Masukkan Nomor Handhpone Anda") ||
+            password.isEmpty() || password.equals("jPasswordField1")) {
+            
+            JOptionPane.showMessageDialog(this, "Semua kolom harus diisi!");
+            return;
+        }
+
+        try {
+            Connection conn = AgenTravel.getKoneksi();
+            
+            // Check if username already exists
+            String cekSql = "SELECT * FROM users WHERE nama = ? OR email = ?";
+            PreparedStatement cekPst = conn.prepareStatement(cekSql);
+            cekPst.setString(1, username);
+            cekPst.setString(2, email);
+            ResultSet cekRs = cekPst.executeQuery();
+            
+            if (cekRs.next()) {
+                JOptionPane.showMessageDialog(this, "Username atau Email sudah terdaftar!");
+                return;
+            }
+            
+            // Insert new user
+            String sql = "INSERT INTO users (nama, email, nomor_telepon, password) VALUES (?, ?, ?, ?)";
+            PreparedStatement pst = conn.prepareStatement(sql);
+            pst.setString(1, username);
+            pst.setString(2, email);
+            pst.setString(3, nomor);
+            pst.setString(4, password);
+
+            int status = pst.executeUpdate();
+            if (status > 0) {
+                JOptionPane.showMessageDialog(this, "Registrasi Berhasil! Silakan Login.");
+                new JLoginPengguna().setVisible(true);
+                this.dispose();
+            } else {
+                JOptionPane.showMessageDialog(this, "Registrasi Gagal!");
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Terjadi kesalahan: " + e.getMessage());
+        }
     }//GEN-LAST:event_btnDaftarActionPerformed
 
     /**
