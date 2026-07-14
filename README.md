@@ -285,4 +285,27 @@ Proyek ini dibuat untuk keperluan akademik / edukasi.
 
 ---
 
+## Kuntibusi
+Kontribusi sangat diterima.
+
+Silakan:
+- Fork repository
+- Buat branch baru
+- Commit perubahan
+- Kirim Pull Request
+
+### Persiaratan
+
+Jelaskan perubahan yang dibuat.
+
+### Alasan
+
+Mengapa perubahan ini diperlukan?
+
+### Checklist
+
+- [ ] Sudah dites
+- [ ] Tidak ada error
+---
+
 ## Terima kasih atas dukungan tim saya dalam meyelesaikan project ini
