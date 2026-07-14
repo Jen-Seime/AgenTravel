@@ -1,33 +1,33 @@
-# 🚌 AgenTravel — Sistem Informasi Agen Travel Bus
+# AgenTravel — Sistem Informasi Agen Travel Bus
 
 Aplikasi desktop berbasis Java Swing untuk manajemen pemesanan tiket bus secara online. Sistem ini dirancang untuk memudahkan pengelolaan jadwal keberangkatan, pemesanan kursi, verifikasi pembayaran, dan pelaporan bagi agen travel bus.
 
 ---
 
-## 📋 Deskripsi Proyek
+## Deskripsi Proyek
 
 **AgenTravel** adalah sistem informasi agen travel bus yang memiliki dua peran utama:
 
 | Peran | Akses |
 |-------|-------|
-| 👨‍💼 **Admin** | Kelola data bus, jadwal, pembayaran, dan laporan |
-| 👤 **Pengguna (Pelanggan)** | Daftar akun, lihat jadwal, pesan tiket, pilih kursi, cetak tiket |
+|  **Admin** | Kelola data bus, jadwal, pembayaran, dan laporan |
+|  **Pengguna (Pelanggan)** | Daftar akun, lihat jadwal, pesan tiket, pilih kursi, cetak tiket |
 
 ---
 
-## ✨ Fitur Utama
+##  Fitur Utama
 
-### 🔐 Autentikasi
+###  Autentikasi
 - Login & Registrasi Pengguna
 - Login Admin
 
-### 👨‍💼 Panel Admin
+###  Panel Admin
 - **Kelola Data Bus** — Tambah, edit, hapus data bus beserta fasilitas dan harga tiket
 - **Kelola Jadwal Keberangkatan** — Atur jadwal bus per rute dan tanggal (kursi dibuat otomatis)
 - **Kelola Pembayaran** — Verifikasi pembayaran pelanggan (ubah status menjadi *Lunas*)
 - **Laporan Pemesanan** — Lihat laporan seluruh transaksi tiket
 
-### 👤 Panel Pelanggan
+###  Panel Pelanggan
 - **Lihat Jadwal Bus** — Cari jadwal berdasarkan rute dan tanggal
 - **Pemesanan Tiket** — Pilih jadwal, pilih kursi secara visual, buat pesanan
 - **Riwayat Pemesanan** — Lihat histori semua pemesanan
@@ -35,7 +35,7 @@ Aplikasi desktop berbasis Java Swing untuk manajemen pemesanan tiket bus secara 
 
 ---
 
-## 🛠️ Teknologi yang Digunakan
+##  Teknologi yang Digunakan
 
 | Komponen | Teknologi |
 |----------|-----------|
@@ -49,7 +49,7 @@ Aplikasi desktop berbasis Java Swing untuk manajemen pemesanan tiket bus secara 
 
 ---
 
-## 🗄️ Struktur Database
+##  Struktur Database
 
 Database: `travel_bus_db`
 
@@ -79,15 +79,15 @@ users
 
 ---
 
-## 📦 Prasyarat Instalasi
+##  Prasyarat Instalasi
 
 Pastikan sudah menginstal semua komponen berikut:
 
-- ✅ **JDK 25** atau lebih baru — [Download JDK](https://www.oracle.com/java/technologies/downloads/)
-- ✅ **Apache NetBeans** (disarankan versi 21+) — [Download NetBeans](https://netbeans.apache.org/front/main/download/)
-- ✅ **MySQL Server** (versi 8.0+) — [Download MySQL](https://dev.mysql.com/downloads/mysql/)
-- ✅ **MySQL Connector/J 9.7.0** — [Download](https://dev.mysql.com/downloads/connector/j/)
-- ✅ **JCalendar 1.4** — [Download](https://toedter.com/jcalendar/)
+-  **JDK 25** atau lebih baru — [Download JDK](https://www.oracle.com/java/technologies/downloads/)
+-  **Apache NetBeans** (disarankan versi 21+) — [Download NetBeans](https://netbeans.apache.org/front/main/download/)
+-  **MySQL Server** (versi 8.0+) — [Download MySQL](https://dev.mysql.com/downloads/mysql/)
+-  **MySQL Connector/J 9.7.0** — [Download](https://dev.mysql.com/downloads/connector/j/)
+-  **JCalendar 1.4** — [Download](https://toedter.com/jcalendar/)
 
 ---
 
@@ -221,17 +221,17 @@ String password = "";           // ← ganti dengan password MySQL Anda
 
 ---
 
-## 🔐 Akun Default
+##  Akun Default
 
 | Role | Username | Password |
 |------|----------|----------|
 | Admin | `admin` | `admin123` |
 
-> ⚠️ Disarankan untuk mengganti password admin setelah pertama kali login.
+>  Disarankan untuk mengganti password admin setelah pertama kali login.
 
 ---
 
-## 📁 Struktur Proyek
+##  Struktur Proyek
 
 ```
 AgenTravel/
@@ -257,7 +257,7 @@ AgenTravel/
 
 ---
 
-## 🔄 Alur Pemesanan Tiket
+##  Alur Pemesanan Tiket
 
 ```
 1. Pengguna login / daftar akun
@@ -279,10 +279,10 @@ AgenTravel/
 
 ---
 
-## 📄 Lisensi
+##  Lisensi
 
 Proyek ini dibuat untuk keperluan akademik / edukasi.
 
 ---
 
-> Dibuat dengan  menggunakan Java Swing & MySQL
+## Terima kasih atas dukungan tim saya dalam meyelesaikan project ini
